@@ -42,11 +42,23 @@ export async function getProvincias(): Promise<Provincia[]> {
 
 export async function getMunicipiosByProvincia(provinciaSlug: string): Promise<Municipio[]> {
   const supabase = await createClient()
+
+  // Step 1: resolver provincia_id desde slug
+  const { data: provincia, error: provError } = await supabase
+    .from('provincias')
+    .select('id')
+    .eq('slug', provinciaSlug)
+    .single()
+
+  if (provError || !provincia) return []
+
+  // Step 2: filtrar municipios por provincia_id (columna directa)
   const { data, error } = await supabase
     .from('municipios')
-    .select('*, partidos(slug, color), provincias!inner(slug)')
-    .eq('provincias.slug', provinciaSlug)
+    .select('*, partidos(slug, color), provincias(slug)')
+    .eq('provincia_id', provincia.id)
     .order('nombre')
+
   if (error) throw new Error(`getMunicipiosByProvincia: ${error.message}`)
   return (data ?? []).map(mapMunicipiosToMap)
 }
