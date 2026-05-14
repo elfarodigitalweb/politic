@@ -1,4 +1,4 @@
-import type { Partido, Provincia, Municipio } from '../mapa'
+import type { Partido, Provincia, Municipio, GeoJSONFeatureProperties } from '../mapa'
 
 describe('mapa types', () => {
   it('Partido tiene los campos requeridos', () => {
@@ -12,7 +12,7 @@ describe('mapa types', () => {
     expect(partido.color).toMatch(/^#[0-9A-Fa-f]{6}$/)
   })
 
-  it('Provincia referencia un partido', () => {
+  it('Provincia tiene código INDEC de 2 dígitos', () => {
     const provincia: Provincia = {
       id: 1,
       nombre: 'Santa Cruz',
@@ -22,7 +22,7 @@ describe('mapa types', () => {
       partidoSlug: 'pj',
       partidoColor: '#003087',
     }
-    expect(provincia.codigoIndec).toBeDefined()
+    expect(provincia.codigoIndec).toMatch(/^\d{2}$/)
   })
 
   it('Municipio acepta imagen null', () => {
@@ -38,5 +38,14 @@ describe('mapa types', () => {
       imagenNegativa: null,
     }
     expect(municipio.imagenPositiva).toBeNull()
+  })
+
+  it('GeoJSONFeatureProperties tiene nombre y slug requeridos', () => {
+    const props: GeoJSONFeatureProperties = {
+      nombre: 'Santa Cruz',
+      slug: 'santa-cruz',
+    }
+    expect(props.codigoIndec).toBeUndefined()
+    expect(props.nombre).toBeDefined()
   })
 })
