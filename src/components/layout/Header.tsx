@@ -9,10 +9,7 @@ const NAV_LINKS = [
   { label: 'Mapa', href: '/mapa' },
   { label: 'Imagen', href: '/imagen' },
   { label: 'Noticias', href: '/noticias' },
-  { label: 'Política', href: '/politica' },
   { label: 'Santa Cruz', href: '/santa-cruz' },
-  { label: 'Provincias', href: '/provincias' },
-  { label: 'Economía', href: '/economia' },
   { label: 'Elecciones', href: '/elecciones' },
 ]
 

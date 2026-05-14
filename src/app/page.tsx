@@ -25,17 +25,27 @@ export default function HomePage() {
           </p>
         </Link>
 
-        <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-6 opacity-60">
-          <TrendingUp size={32} className="text-gray-400 mb-3" />
-          <h2 className="text-lg font-black text-gray-500 mb-2">Imagen Política</h2>
-          <p className="text-sm text-gray-400">Próximamente — Módulo 2</p>
-        </div>
+        <Link
+          href="/imagen"
+          className="group bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-6 transition-all"
+        >
+          <TrendingUp size={32} className="text-[#E31E24] mb-3" />
+          <h2 className="text-lg font-black text-gray-900 mb-2">Imagen Política</h2>
+          <p className="text-sm text-gray-500">
+            Ranking de imagen positiva y negativa analizado en tiempo real con IA.
+          </p>
+        </Link>
 
-        <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-6 opacity-60">
-          <Newspaper size={32} className="text-gray-400 mb-3" />
-          <h2 className="text-lg font-black text-gray-500 mb-2">Monitor de Noticias</h2>
-          <p className="text-sm text-gray-400">Próximamente — Módulo 4</p>
-        </div>
+        <Link
+          href="/noticias"
+          className="group bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-6 transition-all"
+        >
+          <Newspaper size={32} className="text-[#E31E24] mb-3" />
+          <h2 className="text-lg font-black text-gray-900 mb-2">Monitor de Noticias</h2>
+          <p className="text-sm text-gray-500">
+            Noticias políticas en tiempo real filtradas por provincia.
+          </p>
+        </Link>
       </div>
     </div>
   )
