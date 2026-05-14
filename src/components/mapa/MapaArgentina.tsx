@@ -5,19 +5,20 @@ import { MapContainer, TileLayer } from 'react-leaflet'
 import type { GeoJsonObject } from 'geojson'
 import type { Provincia, Municipio } from '@/types/mapa'
 import { CapaProvincias } from './CapaProvincias'
+import { CapaMunicipios } from './CapaMunicipios'
+import { PanelDetalle } from './PanelDetalle'
 import { LeyendaPartidos } from './LeyendaPartidos'
 
 interface Props {
   provincias: Provincia[]
   municipiosSC: Municipio[]
-  onProvinciaClick?: (slug: string) => void
-  onMunicipioClick?: (municipio: Municipio) => void
 }
 
-export function MapaArgentina({ provincias, municipiosSC, onProvinciaClick, onMunicipioClick }: Props) {
+export function MapaArgentina({ provincias, municipiosSC }: Props) {
   const [geoProvincias, setGeoProvincias] = useState<GeoJsonObject | null>(null)
   const [geoMunicipios, setGeoMunicipios] = useState<GeoJsonObject | null>(null)
   const [provinciaSeleccionada, setProvinciaSeleccionada] = useState<string | null>(null)
+  const [municipioSeleccionado, setMunicipioSeleccionado] = useState<Municipio | null>(null)
 
   useEffect(() => {
     fetch('/geojson/argentina-provincias.geojson')
@@ -33,7 +34,11 @@ export function MapaArgentina({ provincias, municipiosSC, onProvinciaClick, onMu
 
   function handleProvinciaClick(slug: string) {
     setProvinciaSeleccionada(slug)
-    onProvinciaClick?.(slug)
+    setMunicipioSeleccionado(null)
+  }
+
+  function handleMunicipioClick(municipio: Municipio) {
+    setMunicipioSeleccionado(municipio)
   }
 
   if (!geoProvincias) {
@@ -62,9 +67,24 @@ export function MapaArgentina({ provincias, municipiosSC, onProvinciaClick, onMu
           provincias={provincias}
           onProvinciaClick={handleProvinciaClick}
         />
+
+        {provinciaSeleccionada === 'santa-cruz' && geoMunicipios && (
+          <CapaMunicipios
+            geojson={geoMunicipios}
+            municipios={municipiosSC}
+            onMunicipioClick={handleMunicipioClick}
+          />
+        )}
       </MapContainer>
 
       <LeyendaPartidos />
+
+      {municipioSeleccionado && (
+        <PanelDetalle
+          municipio={municipioSeleccionado}
+          onClose={() => setMunicipioSeleccionado(null)}
+        />
+      )}
     </div>
   )
 }
