@@ -29,13 +29,6 @@ export function parseSentimentResponse(
   }
 }
 
-export function calcularSentimientoSync(
-  texto: string
-): { sentimiento: Sentimiento; score: number } {
-  if (!texto.trim()) return { sentimiento: 'neutral', score: 0 }
-  return { sentimiento: 'neutral', score: 0 }
-}
-
 export async function analyzeSentiment(
   texto: string
 ): Promise<{ sentimiento: Sentimiento; score: number }> {

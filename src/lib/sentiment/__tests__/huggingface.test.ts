@@ -1,4 +1,4 @@
-import { parseSentimentResponse, calcularSentimientoSync } from '../huggingface'
+import { parseSentimentResponse } from '../huggingface'
 
 describe('huggingface sentiment', () => {
   it('parseSentimentResponse extrae sentimiento con mayor score', () => {
@@ -28,11 +28,6 @@ describe('huggingface sentiment', () => {
       { label: 'NEG', score: 0.10 },
     ]]
     expect(parseSentimentResponse(mockResponse).sentimiento).toBe('neutral')
-  })
-
-  it('calcularSentimientoSync retorna neutral para texto vacío', () => {
-    expect(calcularSentimientoSync('').sentimiento).toBe('neutral')
-    expect(calcularSentimientoSync('   ').sentimiento).toBe('neutral')
   })
 
   it('parseSentimentResponse maneja array vacío con neutral', () => {
