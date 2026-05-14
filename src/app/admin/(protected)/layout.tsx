@@ -37,6 +37,12 @@ export default async function AdminLayout({
             Imagen
           </Link>
           <Link
+            href="/admin/medios"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Medios
+          </Link>
+          <Link
             href="/mapa"
             className="text-gray-300 hover:text-white transition-colors"
           >
