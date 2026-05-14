@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Usado para tracking de analytics locales y caché de trending
+model ArticleView {
+  id        String   @id @default(cuid())
+  articleId Int
+  slug      String
+  viewedAt  DateTime @default(now())
+
+  @@index([slug])
+  @@index([viewedAt])
+}
+
+model NewsletterSubscriber {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  confirmed   Boolean   @default(false)
+  token       String    @unique @default(cuid())
+  subscribedAt DateTime @default(now())
+  province    String?
+
+  @@index([email])
+}
