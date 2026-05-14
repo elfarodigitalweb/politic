@@ -31,6 +31,12 @@ export default async function AdminLayout({
             Políticos
           </Link>
           <Link
+            href="/admin/imagen"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Imagen
+          </Link>
+          <Link
             href="/mapa"
             className="text-gray-300 hover:text-white transition-colors"
           >
