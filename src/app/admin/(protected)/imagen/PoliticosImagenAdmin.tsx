@@ -25,6 +25,7 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
   const [keywords, setKeywords] = useState('')
   const [partidoNombre, setPartidoNombre] = useState('')
   const [partidoColor, setPartidoColor] = useState('#94a3b8')
+  const [facebookPageId, setFacebookPageId] = useState('')
   const [enTesteo, setEnTesteo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [triggerLoading, setTriggerLoading] = useState(false)
@@ -43,10 +44,11 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
       palabras_clave: keywords.split(',').map(k => k.trim()).filter(Boolean),
       partido_nombre: partidoNombre.trim() || null,
       partido_color: partidoColor,
+      facebook_page_id: facebookPageId.trim() || null,
       en_testeo: enTesteo,
     })
     setNombre(''); setKeywords(''); setPartidoNombre('')
-    setPartidoColor('#94a3b8'); setShowForm(false); setSaving(false)
+    setPartidoColor('#94a3b8'); setFacebookPageId(''); setShowForm(false); setSaving(false)
     router.refresh()
   }
 
@@ -137,6 +139,12 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
                 Ej: Claudio Vidal, gobernador Santa Cruz, Vidal SC — máx 3 recomendado
               </p>
             </div>
+            <input
+              value={facebookPageId}
+              onChange={e => setFacebookPageId(e.target.value)}
+              placeholder="Facebook Page ID o username (ej: claudiovidal.gobernador)"
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 sm:col-span-2"
+            />
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={enTesteo} onChange={e => setEnTesteo(e.target.checked)} className="rounded" />

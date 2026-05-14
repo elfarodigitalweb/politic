@@ -1,5 +1,6 @@
 import { fetchAllRSSFeeds } from '@/lib/sources/rss'
 import { fetchNewsForKeywords } from '@/lib/sources/googleNews'
+import { fetchFacebookPosts } from '@/lib/sources/facebook'
 import { analyzeSentiment } from './huggingface'
 import {
   getPoliticos,
@@ -86,6 +87,23 @@ export async function ejecutarAnalisisCompleto(): Promise<{
 
     for (const politico of politicos) {
       await analizarPolitico(politico.id, politico.palabrasClave, todasNoticias)
+
+      // Facebook: analizar si tiene pageId configurado
+      if (politico.facebookPageId) {
+        const fbPosts = await fetchFacebookPosts(politico.facebookPageId)
+        if (fbPosts.length > 0) {
+          const fbMenciones: Omit<Mencion, 'id'>[] = fbPosts.map(post => ({
+            politicoId: politico.id,
+            fuente: 'facebook',
+            titulo: post.titulo,
+            url: post.url,
+            sentimiento: post.sentimientoFinal.sentimiento,
+            score: post.sentimientoFinal.score,
+            publicadoAt: post.publicadoAt,
+          }))
+          await guardarMenciones(fbMenciones)
+        }
+      }
     }
 
     return { procesados: politicos.length }
