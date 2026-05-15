@@ -1,13 +1,16 @@
 import { fetchAllRSSFeeds } from '@/lib/sources/rss'
 import { fetchNewsForKeywords } from '@/lib/sources/googleNews'
 import { fetchFacebookPosts } from '@/lib/sources/facebook'
-import { analyzeSentiment } from './huggingface'
+import { fetchAvisosPoliticos } from '@/lib/sources/adlibrary'
+import { fetchInstagramPosts } from '@/lib/sources/apify'
+import { analyzeSentiment, analizarPorKeywords } from './huggingface'
 import {
   getPoliticos,
   guardarMenciones,
   guardarImagenHistorico,
   calcularImagenActual,
 } from '@/lib/supabase/politicos-queries'
+import { guardarAvisos } from '@/lib/supabase/avisos-queries'
 import type { Mencion } from '@/types/imagen'
 
 interface NewsItem {
@@ -102,6 +105,40 @@ export async function ejecutarAnalisisCompleto(): Promise<{
             publicadoAt: post.publicadoAt,
           }))
           await guardarMenciones(fbMenciones)
+        }
+      }
+
+      // Ad Library: avisos políticos de Facebook
+      const avisos = await fetchAvisosPoliticos(politico.nombre)
+      if (avisos.length > 0) {
+        await guardarAvisos(politico.id, avisos)
+        // Los avisos también influyen en sentimiento (texto del aviso)
+        const avisosMenciones: Omit<Mencion, 'id'>[] = avisos.map(a => ({
+          politicoId: politico.id,
+          fuente: 'facebook_ad',
+          titulo: a.texto,
+          url: a.urlPreview,
+          sentimiento: analizarPorKeywords(a.texto).sentimiento,
+          score: analizarPorKeywords(a.texto).score,
+          publicadoAt: a.fechaInicio ?? new Date().toISOString(),
+        }))
+        await guardarMenciones(avisosMenciones)
+      }
+
+      // Instagram via Apify
+      if (politico.instagramUsername) {
+        const igPosts = await fetchInstagramPosts(politico.instagramUsername)
+        if (igPosts.length > 0) {
+          const igMenciones: Omit<Mencion, 'id'>[] = igPosts.map(p => ({
+            politicoId: politico.id,
+            fuente: 'instagram',
+            titulo: p.titulo,
+            url: p.url,
+            sentimiento: p.sentimiento.sentimiento,
+            score: p.sentimiento.score,
+            publicadoAt: p.publicadoAt,
+          }))
+          await guardarMenciones(igMenciones)
         }
       }
     }
