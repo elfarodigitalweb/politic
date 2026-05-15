@@ -3,6 +3,9 @@ import { fetchNewsForKeywords } from '@/lib/sources/googleNews'
 import { fetchFacebookPosts } from '@/lib/sources/facebook'
 import { fetchAvisosPoliticos } from '@/lib/sources/adlibrary'
 import { fetchInstagramPosts } from '@/lib/sources/apify'
+import { fetchGoogleTrends } from '@/lib/sources/trends'
+import { fetchYouTubeData } from '@/lib/sources/youtube'
+import { guardarTendencia } from '@/lib/supabase/tendencias-queries'
 import { analyzeSentiment, analizarPorKeywords } from './huggingface'
 import {
   getPoliticos,
@@ -141,6 +144,31 @@ export async function ejecutarAnalisisCompleto(): Promise<{
           await guardarMenciones(igMenciones)
         }
       }
+
+      // Google Trends
+      const trends = await fetchGoogleTrends(politico.nombre, politico.palabrasClave)
+      if (trends) {
+        await guardarTendencia(politico.id, 'google_trends', trends.interesActual, trends.porProvincia.length)
+      }
+
+      // YouTube comentarios
+      const ytData = await fetchYouTubeData(politico.nombre, politico.palabrasClave)
+      if (ytData && ytData.comentarios.length > 0) {
+        const ytMenciones: Omit<Mencion, 'id'>[] = ytData.comentarios.map(c => ({
+          politicoId: politico.id,
+          fuente: 'youtube',
+          titulo: c.texto,
+          url: null,
+          sentimiento: c.sentimiento.sentimiento,
+          score: c.sentimiento.score,
+          publicadoAt: c.publicadoAt,
+        }))
+        await guardarMenciones(ytMenciones)
+        await guardarTendencia(politico.id, 'youtube', Math.round(ytData.scorePromedio * 100), ytData.totalVideos)
+      }
+
+      // Pequeña pausa entre políticos
+      await new Promise(r => setTimeout(r, 500))
     }
 
     return { procesados: politicos.length }

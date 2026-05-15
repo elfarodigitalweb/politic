@@ -3,9 +3,11 @@ import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { getPoliticoBySlug, getUltimaImagen, getHistorialImagen } from '@/lib/supabase/politicos-queries'
 import { getAvisosByPolitico, getGastoTotalPolitico } from '@/lib/supabase/avisos-queries'
+import { getAllTendencias } from '@/lib/supabase/tendencias-queries'
 import { BadgeCargo } from '@/components/imagen/BadgeCargo'
 import { GraficoTendencia } from '@/components/imagen/GraficoTendencia'
 import { AvisosSection } from '@/components/imagen/AvisosSection'
+import { TendenciasSection } from '@/components/imagen/TendenciasSection'
 import { TrendingUp, TrendingDown, Lock } from 'lucide-react'
 
 export const revalidate = 300
@@ -33,11 +35,12 @@ export default async function PerfilPoliticoPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   const isLoggedIn = !!user
 
-  const [imagenActual, historial, avisos, gastoTotal] = await Promise.all([
+  const [imagenActual, historial, avisos, gastoTotal, tendencias] = await Promise.all([
     getUltimaImagen(politico.id),
     isLoggedIn ? getHistorialImagen(politico.id, 30) : Promise.resolve([]),
     isLoggedIn ? getAvisosByPolitico(politico.id) : Promise.resolve([]),
     isLoggedIn ? getGastoTotalPolitico(politico.id) : Promise.resolve({ min: 0, max: 0, totalAvisos: 0 }),
+    isLoggedIn ? getAllTendencias(politico.id) : Promise.resolve([]),
   ])
 
   return (
@@ -101,6 +104,10 @@ export default async function PerfilPoliticoPage({ params }: Props) {
 
       {isLoggedIn && (
         <AvisosSection avisos={avisos} gastoTotal={gastoTotal} />
+      )}
+
+      {isLoggedIn && (
+        <TendenciasSection tendencias={tendencias} />
       )}
     </div>
   )
