@@ -1,53 +1,125 @@
 import Link from 'next/link'
 
-const SECTIONS = [
-  { label: 'Política', href: '/politica' },
-  { label: 'Santa Cruz', href: '/santa-cruz' },
-  { label: 'Provincias', href: '/provincias' },
-  { label: 'Economía', href: '/economia' },
-  { label: 'Elecciones', href: '/elecciones' },
+const COLS = [
+  {
+    titulo: 'Plataforma',
+    links: [
+      { label: 'Imagen Política',     href: '/imagen' },
+      { label: 'Tablero Santa Cruz',  href: '/santa-cruz' },
+      { label: 'Mapa Político',       href: '/mapa' },
+      { label: 'Monitor de Noticias', href: '/noticias' },
+    ],
+  },
+  {
+    titulo: 'Análisis',
+    links: [
+      { label: 'Encuestas',         href: '/encuestas' },
+      { label: 'Comparar',          href: '/comparar' },
+      { label: 'Informes PDF',      href: '/informe' },
+      { label: 'Clipping IA',       href: '/clipping' },
+    ],
+  },
+  {
+    titulo: 'Consultora',
+    links: [
+      { label: 'Quiénes somos', href: '/nosotros' },
+      { label: 'Metodología',   href: '/metodologia' },
+      { label: 'Contacto',      href: '/contacto' },
+      { label: 'Admin',         href: '/admin' },
+    ],
+  },
 ]
 
 export function Footer() {
   return (
-    <footer className="bg-gray-900 text-gray-300 mt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <Link href="/" className="text-xl font-black text-white">
-              Santa Cruz<span className="text-[#E31E24]">Política</span>
+    <footer
+      className="mt-24"
+      style={{
+        background: 'var(--cream)',
+        borderTop: '1px solid var(--hairline)',
+      }}
+    >
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
+
+        {/* ─── Brand block ──────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 pb-12" style={{ borderBottom: '1px solid var(--hairline)' }}>
+
+          <div className="lg:col-span-5">
+            <Link href="/" className="inline-flex flex-col leading-[0.95] mb-6">
+              <span
+                className="font-bold uppercase"
+                style={{
+                  fontFamily: 'var(--font-cormorant), Georgia, serif',
+                  fontSize: '1.45rem',
+                  letterSpacing: '0.18em',
+                  color: 'var(--ink)',
+                }}
+              >
+                Rumbo
+              </span>
+              <span
+                className="font-semibold uppercase mt-0.5"
+                style={{ fontSize: '0.5rem', letterSpacing: '0.4em', color: 'var(--wine)' }}
+              >
+                Estratégico
+              </span>
             </Link>
-            <p className="mt-3 text-sm text-gray-400 leading-relaxed">
-              Monitoreo político en tiempo real de Santa Cruz y las provincias de Argentina.
+            <p
+              className="max-w-md text-base leading-relaxed"
+              style={{
+                fontFamily: 'var(--font-cormorant), Georgia, serif',
+                fontStyle: 'italic',
+                color: 'var(--ink-soft)',
+              }}
+            >
+              Consultora de inteligencia política especializada en monitoreo de medios
+              y análisis electoral Argentina.
             </p>
+            <div className="mt-6 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--wine)' }} />
+              <span className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'var(--ink-light)' }}>
+                 
+              </span>
+            </div>
           </div>
 
-          <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Secciones</h3>
-            <ul className="space-y-2">
-              {SECTIONS.map((s) => (
-                <li key={s.href}>
-                  <Link href={s.href} className="text-sm hover:text-white transition-colors">
-                    {s.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Consultora</h3>
-            <ul className="space-y-2 text-sm">
-              <li><Link href="/nosotros" className="hover:text-white transition-colors">Quiénes somos</Link></li>
-              <li><Link href="/metodologia" className="hover:text-white transition-colors">Metodología</Link></li>
-              <li><Link href="/contacto" className="hover:text-white transition-colors">Contacto</Link></li>
-            </ul>
-          </div>
+          {COLS.map(col => (
+            <div key={col.titulo} className="lg:col-span-2">
+              <h3
+                className="font-semibold mb-5 uppercase"
+                style={{
+                  fontSize: '10px',
+                  letterSpacing: '0.28em',
+                  color: 'var(--wine)',
+                }}
+              >
+                {col.titulo}
+              </h3>
+              <ul className="space-y-3">
+                {col.links.map(l => (
+                  <li key={l.href}>
+                    <Link
+                      href={l.href}
+                      className="text-sm transition-colors"
+                      style={{ color: 'var(--ink-muted)' }}
+                    >
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="mt-10 pt-6 border-t border-gray-800 text-xs text-gray-500 flex flex-col sm:flex-row justify-between gap-2">
-          <p>© {new Date().getFullYear()} SantaCruzPolítica. Todos los derechos reservados.</p>
-          <p>Análisis político independiente</p>
+        {/* ─── Bottom ───────────────────────────────────── */}
+        <div className="pt-8 flex flex-col sm:flex-row justify-between gap-3">
+          <p className="text-[10px] tracking-[0.12em]" style={{ color: 'var(--ink-light)' }}>
+            © {new Date().getFullYear()} · Rumbo Estratégico · Todos los derechos reservados
+          </p>
+          <p className="text-[10px] tracking-[0.12em]" style={{ color: 'var(--ink-light)' }}>
+            Análisis político independiente · Santa Cruz, Argentina
+          </p>
         </div>
       </div>
     </footer>

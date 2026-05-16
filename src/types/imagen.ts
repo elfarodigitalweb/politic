@@ -2,6 +2,22 @@ export type Cargo = 'gobernador' | 'diputado' | 'senador' | 'intendente' | 'conc
 export type Sentimiento = 'positivo' | 'negativo' | 'neutral'
 export type Fuente = 'rss' | 'google_news' | 'facebook' | 'instagram'
 
+export interface Encuesta {
+  id: number
+  politicoId: number
+  fecha: string
+  intencionVoto: number | null
+  imagenPositiva: number | null
+  imagenNegativa: number | null
+  conocimiento: number | null
+  fuente: string
+  metodologia: string | null
+  universo: number | null
+  margenError: number | null
+  notas: string | null
+  createdAt: string
+}
+
 export interface Politico {
   id: number
   nombre: string
@@ -49,4 +65,5 @@ export interface ImagenActual {
 
 export interface PoliticoConImagen extends Politico {
   imagenActual: ImagenActual | null
+  deltaImagen: number | null
 }

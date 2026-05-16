@@ -30,6 +30,19 @@ export interface Municipio {
   imagenNegativa: number | null
 }
 
+export interface CiudadSC {
+  id: number
+  nombre: string
+  slug: string
+  latitud: number
+  longitud: number
+  intendenteNombre: string | null
+  partidoSlug: string | null
+  partidoColor: string
+  imagenPositiva: number | null
+  imagenNegativa: number | null
+}
+
 export interface GeoJSONFeatureProperties {
   nombre: string
   slug: string

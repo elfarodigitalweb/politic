@@ -1,5 +1,8 @@
 const CARGO_COLORS: Record<string, string> = {
+  presidente: 'bg-red-100 text-red-800',
+  vicepresidente: 'bg-red-50 text-red-700',
   gobernador: 'bg-purple-100 text-purple-800',
+  vicegobernador: 'bg-purple-50 text-purple-700',
   senador: 'bg-blue-100 text-blue-800',
   diputado: 'bg-indigo-100 text-indigo-800',
   intendente: 'bg-green-100 text-green-800',

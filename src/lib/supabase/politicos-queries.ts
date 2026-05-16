@@ -38,13 +38,31 @@ export function calcularImagenActual(
 ): ImagenActual | null {
   const pos = menciones.filter(m => m.sentimiento === 'positivo').length
   const neg = menciones.filter(m => m.sentimiento === 'negativo').length
-  const total = pos + neg
-  if (total === 0) return null
+  const neu = menciones.filter(m => m.sentimiento === 'neutral').length
+  const total = pos + neg + neu
+
+  // Requiere mínimo 5 menciones con sentimiento definido para evitar 100%/0%
+  if (pos + neg < 5) return null
+
+  // Los neutros se distribuyen proporcionalmente
+  const totalPosNeg = pos + neg
+  const posConNeutros = pos + (neu * pos) / totalPosNeg
+  const negConNeutros = neg + (neu * neg) / totalPosNeg
+
+  // Suavizado bayesiano: agregar 3 "neutros" sintéticos para evitar extremos
+  const PRIOR = 3
+  const posSmooth = posConNeutros + PRIOR / 2
+  const negSmooth = negConNeutros + PRIOR / 2
+  const totalSmooth = posSmooth + negSmooth
+
+  const imagenPositiva = Math.round((posSmooth / totalSmooth) * 10000) / 100
+  const imagenNegativa = Math.round((negSmooth / totalSmooth) * 10000) / 100
+
   return {
     politicoId,
-    imagenPositiva: Math.round((pos / total) * 10000) / 100,
-    imagenNegativa: Math.round((neg / total) * 10000) / 100,
-    totalMenciones: menciones.length,
+    imagenPositiva,
+    imagenNegativa,
+    totalMenciones: total,
     calculadoAt: new Date().toISOString(),
   }
 }
@@ -78,7 +96,7 @@ export async function getUltimaImagen(politicoId: number): Promise<ImagenHistori
 
 export async function getHistorialImagen(
   politicoId: number,
-  dias = 30
+  dias = 730
 ): Promise<ImagenHistorico[]> {
   const supabase = await createClient()
   const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
@@ -91,16 +109,50 @@ export async function getHistorialImagen(
 }
 
 export async function getPoliticosConImagen(): Promise<PoliticoConImagen[]> {
-  const politicos = await getPoliticos()
+  const [politicos, supabase] = await Promise.all([getPoliticos(), createClient()])
   const results = await Promise.all(
-    politicos.map(async p => ({
-      ...p,
-      imagenActual: await getUltimaImagen(p.id),
-    }))
+    politicos.map(async (p) => {
+      const { data } = await supabase
+        .from('imagen_historico')
+        .select('*')
+        .eq('politico_id', p.id)
+        .order('calculado_at', { ascending: false })
+        .limit(2)
+      const imagenActual = data?.[0] ? mapImagenRow(data[0]) : null
+      const imagenAnterior = data?.[1] ? mapImagenRow(data[1]) : null
+      const deltaImagen =
+        imagenActual && imagenAnterior
+          ? Math.round((imagenActual.imagenPositiva - imagenAnterior.imagenPositiva) * 10) / 10
+          : null
+      return { ...p, imagenActual, deltaImagen }
+    })
   )
   return results.sort(
     (a, b) => (b.imagenActual?.imagenPositiva ?? -1) - (a.imagenActual?.imagenPositiva ?? -1)
   )
+}
+
+export async function getMencionesByPolitico(
+  politicoId: number,
+  limit = 20
+): Promise<Mencion[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('menciones')
+    .select('*')
+    .eq('politico_id', politicoId)
+    .order('publicado_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    politicoId: row.politico_id,
+    fuente: row.fuente,
+    titulo: row.titulo,
+    sentimiento: row.sentimiento,
+    score: row.score,
+    publicadoAt: row.publicado_at,
+    url: row.url,
+  }))
 }
 
 export async function guardarMenciones(
@@ -119,6 +171,52 @@ export async function guardarMenciones(
       publicado_at: m.publicadoAt,
     }))
   )
+}
+
+export async function getMencionesNegativasSC(
+  dias = 7,
+  limit = 60
+): Promise<{ politicoId: number; nombre: string; slug: string; cargo: string; titulo: string; fuente: string; url: string | null; score: number; publicadoAt: string }[]> {
+  const supabase = await createClient()
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+  // Solo fuentes de noticias reales, excluir redes sociales y comentarios
+  const FUENTES_NOTICIAS = ['rss', 'google_news']
+  const { data: menciones } = await supabase
+    .from('menciones')
+    .select('politico_id, titulo, fuente, url, score, publicado_at')
+    .eq('sentimiento', 'negativo')
+    .gte('publicado_at', desde)
+    .in('fuente', FUENTES_NOTICIAS)
+    .order('score', { ascending: true })
+    .limit(limit)
+
+  if (!menciones || menciones.length === 0) return []
+
+  const politicoIds = [...new Set(menciones.map(m => m.politico_id))]
+  const { data: politicos } = await supabase
+    .from('politicos')
+    .select('id, nombre, slug, cargo, provincia_slug')
+    .in('id', politicoIds)
+    .eq('provincia_slug', 'santa-cruz')
+
+  const politicoMap = new Map((politicos ?? []).map(p => [p.id, p]))
+
+  return menciones
+    .filter(m => politicoMap.has(m.politico_id))
+    .map(m => {
+      const p = politicoMap.get(m.politico_id)!
+      return {
+        politicoId: m.politico_id,
+        nombre: p.nombre,
+        slug: p.slug,
+        cargo: p.cargo,
+        titulo: m.titulo,
+        fuente: m.fuente,
+        url: m.url,
+        score: m.score,
+        publicadoAt: m.publicado_at,
+      }
+    })
 }
 
 export async function guardarImagenHistorico(

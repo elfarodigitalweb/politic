@@ -31,10 +31,28 @@ export default async function AdminLayout({
             Políticos
           </Link>
           <Link
+            href="/admin/partidos"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Partidos
+          </Link>
+          <Link
             href="/admin/imagen"
             className="text-gray-300 hover:text-white transition-colors"
           >
             Imagen
+          </Link>
+          <Link
+            href="/admin/encuestas"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Encuestas
+          </Link>
+          <Link
+            href="/santa-cruz"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Santa Cruz
           </Link>
           <Link
             href="/admin/medios"

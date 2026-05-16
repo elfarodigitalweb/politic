@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import type { Provincia, Municipio } from '@/types/mapa'
+import type { Provincia, Municipio, CiudadSC } from '@/types/mapa'
 
 const MapaArgentina = dynamic(
   () => import('@/components/mapa/MapaArgentina').then((m) => m.MapaArgentina),
@@ -18,8 +18,9 @@ const MapaArgentina = dynamic(
 interface Props {
   provincias: Provincia[]
   municipiosSC: Municipio[]
+  ciudadesSC: CiudadSC[]
 }
 
-export function MapaArgentinaClient({ provincias, municipiosSC }: Props) {
-  return <MapaArgentina provincias={provincias} municipiosSC={municipiosSC} />
+export function MapaArgentinaClient({ provincias, municipiosSC, ciudadesSC }: Props) {
+  return <MapaArgentina provincias={provincias} municipiosSC={municipiosSC} ciudadesSC={ciudadesSC} />
 }

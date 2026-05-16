@@ -26,7 +26,7 @@ export function GraficoTendencia({ historial }: { historial: ImagenHistorico[] }
   return (
     <div className="bg-white rounded-xl border p-4">
       <h3 className="text-sm font-bold text-gray-700 mb-4">
-        Tendencia de imagen (últimos 30 días)
+        Tendencia de imagen — evolución histórica
       </h3>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
