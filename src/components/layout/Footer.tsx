@@ -118,7 +118,7 @@ export function Footer() {
             © {new Date().getFullYear()} · Rumbo Estratégico · Todos los derechos reservados
           </p>
           <p className="text-[10px] tracking-[0.12em]" style={{ color: 'var(--ink-light)' }}>
-            Análisis político independiente · Santa Cruz, Argentina
+            Análisis político independiente · Santa Cruz, Argentina.
           </p>
         </div>
       </div>
