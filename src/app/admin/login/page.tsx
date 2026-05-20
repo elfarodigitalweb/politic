@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -31,6 +31,53 @@ export default function LoginPage() {
   }
 
   return (
+    <form onSubmit={handleLogin} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="email" className="text-xs font-semibold text-gray-600 block mb-1">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          placeholder="tu@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+          required
+          autoComplete="email"
+        />
+      </div>
+      <div>
+        <label htmlFor="password" className="text-xs font-semibold text-gray-600 block mb-1">
+          Contraseña
+        </label>
+        <input
+          id="password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+          required
+          autoComplete="current-password"
+        />
+      </div>
+      {error && (
+        <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+      )}
+      <button
+        type="submit"
+        disabled={loading}
+        className="bg-[#E31E24] text-white font-bold py-2.5 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+      >
+        {loading ? 'Ingresando...' : 'Ingresar'}
+      </button>
+    </form>
+  )
+}
+
+export default function LoginPage() {
+  return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm">
         <div className="mb-6">
@@ -39,48 +86,9 @@ export default function LoginPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Panel de administración</p>
         </div>
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <div>
-            <label htmlFor="email" className="text-xs font-semibold text-gray-600 block mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-              required
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="text-xs font-semibold text-gray-600 block mb-1">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-              required
-              autoComplete="current-password"
-            />
-          </div>
-          {error && (
-            <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-[#E31E24] text-white font-bold py-2.5 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            {loading ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
+        <Suspense fallback={<div className="h-40" />}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   )
