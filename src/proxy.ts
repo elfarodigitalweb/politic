@@ -61,9 +61,14 @@ export async function proxy(req: NextRequest) {
     const url = req.nextUrl.clone()
     url.pathname = '/admin/login'
     url.searchParams.set('next', pathname + req.nextUrl.search)
-    return NextResponse.redirect(url)
+    const redirect = NextResponse.redirect(url)
+    // Evitar que el CDN cachee el redirect (que rompe cuando cambia el estado de auth)
+    redirect.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    return redirect
   }
 
+  // Tampoco cacheamos respuestas autenticadas — varían por usuario
+  res.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
   return res
 }
 
