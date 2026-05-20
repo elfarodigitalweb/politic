@@ -25,6 +25,7 @@ export default async function NoticiasPage() {
       nombre: m.nombre,
       urlRss: m.urlRss,
       dominio: m.dominio,
+      urlScraping: m.urlScraping,
       provinciaSlug: m.provinciaSlug,
     }))
   ).catch((e) => {

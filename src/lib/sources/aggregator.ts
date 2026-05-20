@@ -67,6 +67,7 @@ export interface MedioInput {
   nombre: string
   urlRss: string | null
   dominio?: string | null
+  urlScraping?: string | null
   provinciaSlug: string
 }
 
@@ -74,6 +75,23 @@ async function fetchSiteViaGoogleNews(medio: MedioInput): Promise<NoticiaItem[]>
   if (!medio.dominio) return []
   const { fetchGoogleNewsForSite } = await import('./googleNews')
   const items = await fetchGoogleNewsForSite(medio.dominio, medio.nombre)
+  return items
+    .filter(it => it.url)
+    .map(it => ({
+      id: buildNoticiaId(`${it.url}-${medio.provinciaSlug}`),
+      titulo: it.titulo,
+      url: it.url as string,
+      fuente: medio.nombre,
+      provinciaSlug: medio.provinciaSlug,
+      provinciaNombre: getProvinciaNombre(medio.provinciaSlug),
+      publicadoAt: it.publicadoAt,
+    }))
+}
+
+async function fetchSiteViaScrapingHtml(medio: MedioInput): Promise<NoticiaItem[]> {
+  if (!medio.urlScraping) return []
+  const { fetchSiteViaScraping } = await import('./htmlScraper')
+  const items = await fetchSiteViaScraping(medio.urlScraping, medio.nombre)
   return items
     .filter(it => it.url)
     .map(it => ({
@@ -99,20 +117,26 @@ export async function fetchTodasLasNoticias(
       provincia: m.provinciaSlug,
     }))
 
-  // Medios sin RSS pero con dominio → Google News site:
+  // Sin RSS pero con dominio → Google News site:
   const mediosPorDominio = mediosLocales.filter(m => !m.urlRss && m.dominio)
 
+  // Sin RSS y sin dominio (o con dominio mal indexado) pero con urlScraping → scraping HTML
+  const mediosPorScraping = mediosLocales.filter(m => !m.urlRss && !m.dominio && m.urlScraping)
+
   const todasFuentes = [...FEEDS_NACIONALES, ...fuentesRSS]
-  const [rssResults, ...porDominio] = await Promise.all([
+  const [rssResults, ...porFuenteExtra] = await Promise.all([
     Promise.allSettled(todasFuentes.map(fetchFeed)),
     ...mediosPorDominio.map(m =>
       fetchSiteViaGoogleNews(m).catch(() => [] as NoticiaItem[])
+    ),
+    ...mediosPorScraping.map(m =>
+      fetchSiteViaScrapingHtml(m).catch(() => [] as NoticiaItem[])
     ),
   ])
 
   const todas = [
     ...rssResults.flatMap(r => r.status === 'fulfilled' ? r.value : []),
-    ...porDominio.flat(),
+    ...porFuenteExtra.flat(),
   ]
 
   const seen = new Set<string>()

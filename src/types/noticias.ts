@@ -12,9 +12,13 @@ export interface NoticiaItem {
 export interface MedioLocal {
   id: number
   nombre: string
-  // Al menos uno de los dos: urlRss (feed directo) o dominio (consulta Google News site:).
+  // Al menos UNA de las 3 fuentes:
+  // 1) urlRss      — feed RSS directo (preferido)
+  // 2) dominio     — Google News site:dominio (fallback para medios sin RSS pero bien indexados)
+  // 3) urlScraping — scraping HTML directo de la home (último recurso para medios chicos)
   urlRss: string | null
   dominio: string | null
+  urlScraping: string | null
   provinciaSlug: string
   activo: boolean
 }

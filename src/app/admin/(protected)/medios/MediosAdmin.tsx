@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Rss, Globe } from 'lucide-react'
+import { Plus, Trash2, Rss, Globe, Code } from 'lucide-react'
 import { PROVINCIAS_DISPLAY } from '@/types/noticias'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,6 +23,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
   const [nombre, setNombre] = useState('')
   const [urlRss, setUrlRss] = useState('')
   const [dominio, setDominio] = useState('')
+  const [urlScraping, setUrlScraping] = useState('')
   const [provincia, setProvincia] = useState('santa-cruz')
   const [saving, setSaving] = useState(false)
   const [errorForm, setErrorForm] = useState<string | null>(null)
@@ -33,17 +34,22 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
     const nombreLimpio = nombre.trim()
     const rssLimpio = urlRss.trim()
     const dominioLimpio = dominio.trim() ? normalizarDominio(dominio) : ''
+    const scrapingLimpio = urlScraping.trim()
 
     if (!nombreLimpio) {
       setErrorForm('El nombre es obligatorio')
       return
     }
-    if (!rssLimpio && !dominioLimpio) {
-      setErrorForm('Tenés que cargar al menos un RSS o un dominio')
+    if (!rssLimpio && !dominioLimpio && !scrapingLimpio) {
+      setErrorForm('Tenés que cargar al menos un RSS, un dominio o una URL para scraping')
       return
     }
     if (dominioLimpio && !dominioLimpio.includes('.')) {
       setErrorForm('El dominio no parece válido (ej: opisantacruz.com.ar)')
+      return
+    }
+    if (scrapingLimpio && !/^https?:\/\//i.test(scrapingLimpio)) {
+      setErrorForm('La URL de scraping debe empezar con http:// o https://')
       return
     }
 
@@ -53,6 +59,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
       nombre: nombreLimpio,
       url_rss: rssLimpio || null,
       dominio: dominioLimpio || null,
+      url_scraping: scrapingLimpio || null,
       provincia_slug: provincia,
     })
     setSaving(false)
@@ -62,7 +69,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
       return
     }
 
-    setNombre(''); setUrlRss(''); setDominio(''); setShowForm(false)
+    setNombre(''); setUrlRss(''); setDominio(''); setUrlScraping(''); setShowForm(false)
     router.refresh()
   }
 
@@ -102,7 +109,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
 
           <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
             <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide mb-2">
-              Cargá al menos UNO de los dos:
+              Cargá al menos UNA de las 3 opciones:
             </p>
 
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 mb-1">
@@ -116,16 +123,27 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
             />
 
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 mb-1">
-              <Globe size={11} className="text-blue-500" /> Dominio (si el medio no tiene RSS)
+              <Globe size={11} className="text-blue-500" /> Dominio (Google News site:)
             </label>
             <input
               value={dominio}
               onChange={e => setDominio(e.target.value)}
               placeholder="opisantacruz.com.ar"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
+            />
+
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 mb-1">
+              <Code size={11} className="text-purple-500" /> URL para scraping HTML (último recurso)
+            </label>
+            <input
+              value={urlScraping}
+              onChange={e => setUrlScraping(e.target.value)}
+              placeholder="https://www.eldiarionuevodia.com.ar/"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
             />
             <p className="text-[10px] text-gray-500 mt-1.5">
-              Las noticias se buscarán vía Google News (operador <code>site:</code>) si no hay RSS.
+              <span className="font-bold">Orden de prioridad:</span> RSS → Google News → scraping HTML.
+              Usá scraping solo si el medio no tiene RSS y Google News no lo indexa.
             </p>
           </div>
 
@@ -179,30 +197,31 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {medios.map((m: MedioDB) => (
+              {medios.map((m: MedioDB) => {
+                const tipo = m.url_rss ? 'rss' : m.dominio ? 'gnews' : m.url_scraping ? 'scraping' : 'sin'
+                const TipoIcon = tipo === 'rss' ? Rss : tipo === 'gnews' ? Globe : Code
+                const colorIcon = tipo === 'rss' ? 'text-orange-500' : tipo === 'gnews' ? 'text-blue-500' : 'text-purple-500'
+                return (
                 <tr key={m.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {m.url_rss ? (
-                      <div className="flex items-center gap-2">
-                        <Rss size={14} className="text-orange-500 flex-shrink-0" />
-                        {m.nombre}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Globe size={14} className="text-blue-500 flex-shrink-0" />
-                        {m.nombre}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <TipoIcon size={14} className={`${colorIcon} flex-shrink-0`} />
+                      {m.nombre}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {PROVINCIAS_DISPLAY[m.provincia_slug] ?? m.provincia_slug}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate">
-                    {m.url_rss ? (
+                    {tipo === 'rss' ? (
                       <span title={m.url_rss}>RSS · {m.url_rss}</span>
-                    ) : m.dominio ? (
+                    ) : tipo === 'gnews' ? (
                       <span title={`Google News site:${m.dominio}`}>
                         Google News · site:{m.dominio}
+                      </span>
+                    ) : tipo === 'scraping' ? (
+                      <span title={m.url_scraping}>
+                        Scraping HTML · {m.url_scraping}
                       </span>
                     ) : (
                       <span className="text-red-400">Sin fuente</span>
@@ -218,7 +237,8 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
                     </button>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}

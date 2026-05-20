@@ -4,6 +4,7 @@
 
 import { fetchAllRSSFeeds, FUENTES_SC, medioToFeed } from './rss'
 import { fetchNewsForKeywords, fetchGoogleNewsForSite } from './googleNews'
+import { fetchSiteViaScraping } from './htmlScraper'
 import { getMediosLocales } from '@/lib/supabase/medios-queries'
 
 export interface ProblemaDetectado {
@@ -186,28 +187,37 @@ export async function escanearProblematicas(): Promise<ProblemaDetectado[]> {
   // Cargar medios que el admin agregó en /admin/medios (siempre actualizados)
   const mediosLocales = await getMediosLocales().catch(() => [])
 
-  // Medios con RSS → feed directo. Medios sin RSS pero con dominio → Google News site:
+  // Medios con RSS → feed directo. Sin RSS pero con dominio → Google News site:.
+  // Sin ninguno pero con urlScraping → scraping HTML de la home.
   const extraFeeds = mediosLocales
     .filter(m => m.urlRss)
     .map(m => medioToFeed({ nombre: m.nombre, urlRss: m.urlRss as string, provinciaSlug: m.provinciaSlug }))
 
   const mediosPorDominio = mediosLocales.filter(m => !m.urlRss && m.dominio)
+  const mediosPorScraping = mediosLocales.filter(m => !m.urlRss && !m.dominio && m.urlScraping)
 
   // Agregar fuentes locales SC al set de detección prioritaria
   for (const m of mediosLocales) {
     FUENTES_SC.add(m.nombre)
   }
 
-  const [rssItems, googleSC1, googleSC2, ...itemsPorDominio] = await Promise.all([
-    fetchAllRSSFeeds(extraFeeds).catch(() => []),
-    fetchNewsForKeywords(['Santa Cruz Argentina noticias Río Gallegos']).catch(() => []),
-    fetchNewsForKeywords(['Caleta Olivia Las Heras Pico Truncado El Calafate']).catch(() => []),
+  const promesasExtras = [
     ...mediosPorDominio.map(m =>
       fetchGoogleNewsForSite(m.dominio as string, m.nombre).catch(() => [])
     ),
+    ...mediosPorScraping.map(m =>
+      fetchSiteViaScraping(m.urlScraping as string, m.nombre).catch(() => [])
+    ),
+  ]
+
+  const [rssItems, googleSC1, googleSC2, ...itemsExtras] = await Promise.all([
+    fetchAllRSSFeeds(extraFeeds).catch(() => []),
+    fetchNewsForKeywords(['Santa Cruz Argentina noticias Río Gallegos']).catch(() => []),
+    fetchNewsForKeywords(['Caleta Olivia Las Heras Pico Truncado El Calafate']).catch(() => []),
+    ...promesasExtras,
   ])
 
-  const todasNoticias = [...rssItems, ...googleSC1, ...googleSC2, ...itemsPorDominio.flat()]
+  const todasNoticias = [...rssItems, ...googleSC1, ...googleSC2, ...itemsExtras.flat()]
   const problemas: ProblemaDetectado[] = []
   const urlsVistas = new Set<string>()
 

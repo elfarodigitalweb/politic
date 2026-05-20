@@ -94,11 +94,17 @@ export default async function HomePage() {
 
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/santa-cruz"
+                href="/tablero"
                 className="btn-primary inline-flex items-center justify-center gap-2 px-5 py-2.5 text-[10px] font-semibold uppercase"
               >
                 Acceder al tablero
                 <ArrowUpRight size={12} />
+              </Link>
+              <Link
+                href="/admin"
+                className="btn-secondary inline-flex items-center justify-center gap-2 px-5 py-2.5 text-[10px] font-semibold uppercase"
+              >
+                Acceder al admin
               </Link>
               <Link
                 href="/clipping"
