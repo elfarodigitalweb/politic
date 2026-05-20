@@ -4,7 +4,7 @@ import { useState, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Trash2, BarChart2, TrendingUp, TrendingDown, Edit2, Check, X, FileText, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
+import { Plus, Trash2, BarChart2, TrendingUp, TrendingDown, Edit2, Check, X, FileText, ExternalLink, Sparkles, Wand2, AtSign, ThumbsUp } from 'lucide-react'
 
 interface ImagenActual {
   imagenPositiva: number
@@ -40,6 +40,7 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
   const [partidoNombre, setPartidoNombre] = useState('')
   const [partidoColor, setPartidoColor] = useState('#94a3b8')
   const [facebookPageId, setFacebookPageId] = useState('')
+  const [instagramUsername, setInstagramUsername] = useState('')
   const [fotoUrl, setFotoUrl] = useState('')
   const [enTesteo, setEnTesteo] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -95,6 +96,7 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
       partido_nombre: partidoNombre.trim() || null,
       partido_color: partidoColor,
       facebook_page_id: facebookPageId.trim() || null,
+      instagram_username: instagramUsername.trim().replace(/^@/, '') || null,
       foto_url: fotoUrl.trim() || null,
       en_testeo: enTesteo,
     }).select('id, nombre').single()
@@ -121,7 +123,8 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
     }
 
     setNombre(''); setKeywords(''); setPartidoNombre('')
-    setPartidoColor('#94a3b8'); setFacebookPageId(''); setFotoUrl(''); setShowForm(false); setSaving(false)
+    setPartidoColor('#94a3b8'); setFacebookPageId(''); setInstagramUsername('')
+    setFotoUrl(''); setShowForm(false); setSaving(false)
     router.refresh()
   }
 
@@ -129,6 +132,32 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
     if (!confirm(`¿Eliminar a ${nombre}? Se borrarán todas sus menciones.`)) return
     const supabase = createClient()
     await supabase.from('politicos').delete().eq('id', id)
+    router.refresh()
+  }
+
+  async function editarInstagram(p: PoliticoDB) {
+    const actual = p.instagram_username ?? ''
+    const valor = window.prompt(
+      `Instagram de ${p.nombre} (sin @, dejá vacío para quitar):`,
+      actual
+    )
+    if (valor === null) return
+    const limpio = valor.trim().replace(/^@/, '') || null
+    const supabase = createClient()
+    await supabase.from('politicos').update({ instagram_username: limpio }).eq('id', p.id)
+    router.refresh()
+  }
+
+  async function editarFacebook(p: PoliticoDB) {
+    const actual = p.facebook_page_id ?? ''
+    const valor = window.prompt(
+      `Facebook Page ID de ${p.nombre} (dejá vacío para quitar):`,
+      actual
+    )
+    if (valor === null) return
+    const limpio = valor.trim() || null
+    const supabase = createClient()
+    await supabase.from('politicos').update({ facebook_page_id: limpio }).eq('id', p.id)
     router.refresh()
   }
 
@@ -396,6 +425,9 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
             <input value={facebookPageId} onChange={e => setFacebookPageId(e.target.value)}
               placeholder="Facebook Page ID (opcional)"
               className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+            <input value={instagramUsername} onChange={e => setInstagramUsername(e.target.value)}
+              placeholder="Instagram username (sin @, ej: pablograssook)"
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
             <input value={fotoUrl} onChange={e => setFotoUrl(e.target.value)}
               placeholder="URL de foto (opcional)"
               className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
@@ -424,6 +456,7 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
               <th className="text-left px-4 py-3 font-semibold text-gray-600 w-8">#</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Nombre</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Cargo / Partido</th>
+              <th className="text-center px-4 py-3 font-semibold text-gray-600">Redes</th>
               <th className="text-right px-4 py-3 font-semibold text-gray-600">Img +</th>
               <th className="text-right px-4 py-3 font-semibold text-gray-600">Img −</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Nivel</th>
@@ -455,6 +488,32 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
                           <span className="text-[11px] text-gray-400">{p.partido_nombre}</span>
                         </span>
                       )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => editarInstagram(p)}
+                        title={p.instagram_username ? `IG: @${p.instagram_username}` : 'Sin Instagram — click para cargar'}
+                        className={`p-1.5 rounded-md border transition-colors ${
+                          p.instagram_username
+                            ? 'text-pink-600 border-pink-200 bg-pink-50 hover:bg-pink-100'
+                            : 'text-gray-300 border-gray-200 hover:border-pink-300 hover:text-pink-500'
+                        }`}
+                      >
+                        <AtSign size={12} />
+                      </button>
+                      <button
+                        onClick={() => editarFacebook(p)}
+                        title={p.facebook_page_id ? `FB: ${p.facebook_page_id}` : 'Sin Facebook — click para cargar'}
+                        className={`p-1.5 rounded-md border transition-colors ${
+                          p.facebook_page_id
+                            ? 'text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100'
+                            : 'text-gray-300 border-gray-200 hover:border-blue-300 hover:text-blue-500'
+                        }`}
+                      >
+                        <ThumbsUp size={12} />
+                      </button>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -534,7 +593,7 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
                 {/* Fila expandida para cargar imagen manual */}
                 {editImgId === p.id && (
                   <tr className="bg-blue-50">
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={9} className="px-4 py-3">
                       <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs font-bold text-blue-700">
                           Cargar imagen para <strong>{p.nombre}</strong>:
