@@ -2,11 +2,12 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
-import { getProvincias } from '@/lib/supabase/queries'
+import { getProvincias, getMunicipiosByProvincia } from '@/lib/supabase/queries'
 import { getMediosLocales } from '@/lib/supabase/medios-queries'
 import { fetchTodasLasNoticias } from '@/lib/sources/aggregator'
 import {
-  MapPin, Users, Newspaper, ArrowLeft, Plus, Rss, Globe, AlertTriangle, ExternalLink,
+  MapPin, Users, Newspaper, ArrowLeft, Plus, Rss, Globe, Code,
+  AlertTriangle, ExternalLink, Building2, CheckCircle2,
 } from 'lucide-react'
 import { timeAgo } from '@/lib/utils/date'
 
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default async function TableroProvinciaPage({ params }: { params: Params }) {
   const { provincia: provinciaSlug } = await params
 
-  // Santa Cruz tiene su tablero completo aparte
+  // Santa Cruz tiene su tablero completo con alertas en tiempo real
   if (provinciaSlug === 'santa-cruz') redirect('/santa-cruz')
 
   const provincias = await getProvincias().catch(() => [])
@@ -32,14 +33,15 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
   if (!provincia) notFound()
 
   const supabase = await createClient()
-  const [politicosRes, mediosLocalesTodos, noticias] = await Promise.all([
+  const [politicosRes, municipios, mediosLocalesTodos, noticias] = await Promise.all([
     supabase
       .from('politicos')
       .select('id, nombre, slug, cargo, activo')
       .eq('provincia_slug', provinciaSlug)
       .eq('activo', true)
       .order('cargo')
-      .limit(50),
+      .limit(100),
+    getMunicipiosByProvincia(provinciaSlug).catch(() => []),
     getMediosLocales().catch(() => []),
     fetchTodasLasNoticias([]).catch(() => []),
   ])
@@ -51,9 +53,28 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
   const nombresMediosProv = new Set(mediosProv.map(m => m.nombre))
   const noticiasProv = noticias
     .filter(n => n.provinciaSlug === provinciaSlug || nombresMediosProv.has(n.fuente))
-    .slice(0, 20)
+    .slice(0, 15)
 
-  const sinDatos = politicos.length === 0 && mediosProv.length === 0
+  // Stats de progreso
+  const tieneGobernador = !!provincia.gobernadorNombre
+  const tieneMunicipios = municipios.length > 0
+  const tienePoliticos = politicos.length > 0
+  const tieneMedios = mediosProv.length > 0
+  const totalPasos = 4
+  const pasosCompletos =
+    Number(tieneGobernador) +
+    Number(tieneMunicipios) +
+    Number(tienePoliticos) +
+    Number(tieneMedios)
+  const sinDatos = pasosCompletos === 0
+
+  // Separar políticos por categoría
+  const politicosPorCargo: Record<string, typeof politicos> = {}
+  for (const p of politicos) {
+    const k = p.cargo ?? 'Otros'
+    if (!politicosPorCargo[k]) politicosPorCargo[k] = []
+    politicosPorCargo[k].push(p)
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -64,116 +85,247 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
         <ArrowLeft size={12} /> Volver al tablero nacional
       </Link>
 
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-1">
-        <MapPin size={14} className="text-[#E31E24]" />
-        <span className="text-xs font-bold text-[#E31E24] uppercase tracking-widest">
-          Provincia de
-        </span>
-      </div>
-      <h1 className="text-3xl font-black text-gray-900 mb-1">{provincia.nombre}</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        {provincia.gobernadorNombre ? `Gobernador: ${provincia.gobernadorNombre}` : 'Sin gobernador cargado'}
-      </p>
-
-      {sinDatos && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-amber-900 mb-1">Provincia sin datos cargados</p>
-            <p className="text-xs text-amber-800">
-              Esta provincia todavía no tiene políticos ni medios cargados.
-              Usá los botones de abajo para empezar a configurarla.
-            </p>
-          </div>
+      {/* Header con color del partido gobernante */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <span
+            className="w-3 h-3 rounded-full"
+            style={{ backgroundColor: provincia.partidoColor }}
+          />
+          <span className="text-xs font-bold text-[#E31E24] uppercase tracking-widest">
+            Provincia de
+          </span>
         </div>
-      )}
+        <h1 className="text-3xl font-black text-gray-900 mb-1">{provincia.nombre}</h1>
+        <p className="text-sm text-gray-500">
+          {tieneGobernador ? (
+            <>Gobernador: <span className="font-bold text-gray-900">{provincia.gobernadorNombre}</span></>
+          ) : (
+            <span className="italic text-amber-600">Sin gobernador cargado</span>
+          )}
+          {' · '}
+          INDEC {provincia.codigoIndec}
+        </p>
+      </div>
 
-      {/* Acciones rápidas */}
+      {/* Wizard de configuración */}
+      <div className={`mb-6 rounded-xl p-5 border-2 ${
+        pasosCompletos === totalPasos
+          ? 'bg-green-50 border-green-200'
+          : sinDatos
+            ? 'bg-amber-50 border-amber-300'
+            : 'bg-blue-50 border-blue-200'
+      }`}>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-sm font-black uppercase tracking-wide text-gray-800 flex items-center gap-2">
+            {pasosCompletos === totalPasos ? (
+              <><CheckCircle2 size={14} className="text-green-600" /> Provincia configurada</>
+            ) : (
+              <><AlertTriangle size={14} className="text-amber-600" /> Configuración pendiente</>
+            )}
+          </h2>
+          <span className="text-xs font-bold text-gray-600">
+            {pasosCompletos}/{totalPasos} pasos completos
+          </span>
+        </div>
+
+        <ol className="space-y-2 text-sm">
+          <li className="flex items-center gap-2">
+            {tieneGobernador
+              ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+              : <span className="w-3.5 h-3.5 rounded-full border border-gray-400 flex-shrink-0" />}
+            <span className={tieneGobernador ? 'text-gray-600 line-through' : 'text-gray-900'}>
+              1. Cargar gobernador
+            </span>
+            {!tieneGobernador && (
+              <Link href={`/admin/politicos?provincia=${provinciaSlug}`} className="text-xs text-[#E31E24] font-bold hover:underline">
+                → cargar
+              </Link>
+            )}
+          </li>
+          <li className="flex items-center gap-2">
+            {tieneMunicipios
+              ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+              : <span className="w-3.5 h-3.5 rounded-full border border-gray-400 flex-shrink-0" />}
+            <span className={tieneMunicipios ? 'text-gray-600 line-through' : 'text-gray-900'}>
+              2. Cargar municipios con sus intendentes {tieneMunicipios && `(${municipios.length})`}
+            </span>
+            {!tieneMunicipios && (
+              <Link href={`/admin/politicos?provincia=${provinciaSlug}`} className="text-xs text-[#E31E24] font-bold hover:underline">
+                → cargar
+              </Link>
+            )}
+          </li>
+          <li className="flex items-center gap-2">
+            {tienePoliticos
+              ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+              : <span className="w-3.5 h-3.5 rounded-full border border-gray-400 flex-shrink-0" />}
+            <span className={tienePoliticos ? 'text-gray-600 line-through' : 'text-gray-900'}>
+              3. Cargar políticos a monitorear {tienePoliticos && `(${politicos.length})`}
+            </span>
+            {!tienePoliticos && (
+              <Link href={`/admin/politicos?provincia=${provinciaSlug}`} className="text-xs text-[#E31E24] font-bold hover:underline">
+                → cargar
+              </Link>
+            )}
+          </li>
+          <li className="flex items-center gap-2">
+            {tieneMedios
+              ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+              : <span className="w-3.5 h-3.5 rounded-full border border-gray-400 flex-shrink-0" />}
+            <span className={tieneMedios ? 'text-gray-600 line-through' : 'text-gray-900'}>
+              4. Cargar medios locales (RSS, dominio o scraping) {tieneMedios && `(${mediosProv.length})`}
+            </span>
+            {!tieneMedios && (
+              <Link href="/admin/medios" className="text-xs text-[#E31E24] font-bold hover:underline">
+                → cargar
+              </Link>
+            )}
+          </li>
+        </ol>
+      </div>
+
+      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        <Link
-          href="/admin/politicos"
-          className="bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-4 transition-colors block"
-        >
-          <Users size={16} className="text-gray-700 mb-2" />
+        <div className="bg-white border rounded-xl p-4">
+          <Building2 size={14} className="text-gray-400 mb-2" />
+          <p className="text-2xl font-black text-gray-900">{municipios.length}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Municipios</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4">
+          <Users size={14} className="text-gray-400 mb-2" />
           <p className="text-2xl font-black text-gray-900">{politicos.length}</p>
           <p className="text-xs text-gray-500 mt-0.5">Políticos cargados</p>
-          <p className="text-[10px] text-[#E31E24] font-bold mt-1 uppercase">Configurar →</p>
-        </Link>
-        <Link
-          href="/admin/medios"
-          className="bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-4 transition-colors block"
-        >
-          <Newspaper size={16} className="text-gray-700 mb-2" />
+        </div>
+        <div className="bg-white border rounded-xl p-4">
+          <Rss size={14} className="text-gray-400 mb-2" />
           <p className="text-2xl font-black text-gray-900">{mediosProv.length}</p>
           <p className="text-xs text-gray-500 mt-0.5">Medios locales</p>
-          <p className="text-[10px] text-[#E31E24] font-bold mt-1 uppercase">Configurar →</p>
-        </Link>
-        <Link
-          href={`/noticias?provincia=${provinciaSlug}`}
-          className="bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-4 transition-colors block"
-        >
-          <Newspaper size={16} className="text-gray-700 mb-2" />
+        </div>
+        <div className="bg-white border rounded-xl p-4">
+          <Newspaper size={14} className="text-gray-400 mb-2" />
           <p className="text-2xl font-black text-gray-900">{noticiasProv.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Noticias últimas</p>
-          <p className="text-[10px] text-[#E31E24] font-bold mt-1 uppercase">Ver feed →</p>
-        </Link>
-        <Link
-          href="/mapa"
-          className="bg-white border-2 border-gray-200 hover:border-[#E31E24] rounded-xl p-4 transition-colors block"
-        >
-          <MapPin size={16} className="text-gray-700 mb-2" />
-          <p className="text-sm font-black text-gray-900 truncate">Mapa</p>
-          <p className="text-xs text-gray-500 mt-0.5">Ver en mapa</p>
-          <p className="text-[10px] text-[#E31E24] font-bold mt-1 uppercase">Abrir →</p>
-        </Link>
+          <p className="text-xs text-gray-500 mt-0.5">Noticias recientes</p>
+        </div>
       </div>
 
-      {/* Políticos cargados */}
+      {/* MUNICIPIOS — grid estilo Santa Cruz */}
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide">
-            Políticos monitoreados
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide flex items-center gap-2">
+            <Building2 size={14} className="text-gray-500" />
+            Municipios e intendentes
           </h2>
           <Link
-            href="/admin/politicos"
+            href={`/admin/politicos?provincia=${provinciaSlug}`}
             className="text-xs font-bold text-[#E31E24] hover:underline inline-flex items-center gap-1"
           >
-            <Plus size={11} /> Agregar
+            <Plus size={11} /> Agregar municipio
           </Link>
         </div>
-        {politicos.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500">
-            Sin políticos cargados.{' '}
-            <Link href="/admin/politicos" className="text-[#E31E24] font-bold hover:underline">
-              Agregar gobernador e intendentes
+
+        {municipios.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+            <p className="text-sm font-bold text-amber-900 mb-1">Sin municipios cargados</p>
+            <p className="text-xs text-amber-800 mb-3">
+              Cargá los municipios principales de {provincia.nombre} con sus intendentes y partido.
+            </p>
+            <Link
+              href={`/admin/politicos?provincia=${provinciaSlug}`}
+              className="inline-flex items-center gap-1.5 bg-[#E31E24] text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-red-700"
+            >
+              <Plus size={11} /> Configurar municipios
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {politicos.map(p => (
-              <Link
-                key={p.id}
-                href={`/imagen/${p.slug}`}
-                className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:border-[#E31E24] transition-colors flex items-center justify-between gap-2"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {municipios.map(m => (
+              <div
+                key={m.id}
+                className="border-2 border-gray-200 bg-white rounded-xl p-4"
               >
-                <div className="min-w-0">
-                  <p className="font-bold text-sm text-gray-900 truncate">{p.nombre}</p>
-                  {p.cargo && (
-                    <p className="text-[11px] text-gray-500 truncate">{p.cargo}</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: m.partidoColor }}
+                  />
+                  <h3 className="font-black text-gray-900 text-sm leading-tight truncate">
+                    {m.nombre}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-700">
+                  <span className="text-gray-400">👤</span>
+                  {m.intendenteNombre ? (
+                    <span className="font-semibold">{m.intendenteNombre}</span>
+                  ) : (
+                    <span className="italic text-gray-400">Sin intendente</span>
                   )}
                 </div>
-                <ExternalLink size={11} className="text-gray-300 flex-shrink-0" />
-              </Link>
+                {m.partidoSlug && (
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">
+                    {m.partidoSlug}
+                  </p>
+                )}
+                {(m.imagenPositiva != null || m.imagenNegativa != null) && (
+                  <div className="flex items-center gap-3 text-[11px] mt-2 pt-2 border-t border-gray-100">
+                    {m.imagenPositiva != null && (
+                      <span className="text-green-600 font-bold">↑ {m.imagenPositiva.toFixed(1)}%</span>
+                    )}
+                    {m.imagenNegativa != null && (
+                      <span className="text-red-500 font-bold">↓ {m.imagenNegativa.toFixed(1)}%</span>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
       </section>
 
-      {/* Medios configurados */}
+      {/* POLÍTICOS por cargo */}
+      {politicos.length > 0 && (
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide flex items-center gap-2">
+              <Users size={14} className="text-gray-500" />
+              Políticos monitoreados
+            </h2>
+            <Link
+              href={`/admin/politicos?provincia=${provinciaSlug}`}
+              className="text-xs font-bold text-[#E31E24] hover:underline inline-flex items-center gap-1"
+            >
+              <Plus size={11} /> Agregar
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {Object.entries(politicosPorCargo).map(([cargo, lista]) => (
+              <div key={cargo}>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                  {cargo}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {lista.map(p => (
+                    <Link
+                      key={p.id}
+                      href={`/imagen/${p.slug}`}
+                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-[#E31E24] transition-colors flex items-center justify-between gap-2"
+                    >
+                      <p className="font-bold text-sm text-gray-900 truncate">{p.nombre}</p>
+                      <ExternalLink size={11} className="text-gray-300 flex-shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* MEDIOS */}
       <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide flex items-center gap-2">
+            <Rss size={14} className="text-gray-500" />
             Medios locales configurados
           </h2>
           <Link
@@ -184,40 +336,48 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
           </Link>
         </div>
         {mediosProv.length === 0 ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500">
-            Sin medios configurados.{' '}
-            <Link href="/admin/medios" className="text-[#E31E24] font-bold hover:underline">
-              Agregar medios (con RSS o solo dominio)
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+            <p className="text-sm font-bold text-amber-900 mb-1">Sin medios configurados</p>
+            <p className="text-xs text-amber-800 mb-3">
+              Cargá medios locales con RSS, dominio (Google News) o URL de scraping.
+              Sin esto el scanner no detecta noticias de la provincia.
+            </p>
+            <Link
+              href="/admin/medios"
+              className="inline-flex items-center gap-1.5 bg-[#E31E24] text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-red-700"
+            >
+              <Plus size={11} /> Agregar medio
             </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {mediosProv.map(m => (
-              <div
-                key={m.id}
-                className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2"
-              >
-                {m.urlRss ? (
-                  <Rss size={12} className="text-orange-500 flex-shrink-0" />
-                ) : (
-                  <Globe size={12} className="text-blue-500 flex-shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-sm text-gray-900 truncate">{m.nombre}</p>
-                  <p className="text-[10px] text-gray-400 truncate">
-                    {m.urlRss ? `RSS · ${m.urlRss}` : m.dominio ? `Google News · ${m.dominio}` : 'sin fuente'}
-                  </p>
+            {mediosProv.map(m => {
+              const tipo = m.urlRss ? 'rss' : m.dominio ? 'gnews' : 'scraping'
+              const TipoIcon = tipo === 'rss' ? Rss : tipo === 'gnews' ? Globe : Code
+              const color = tipo === 'rss'
+                ? 'text-orange-500'
+                : tipo === 'gnews' ? 'text-blue-500' : 'text-purple-500'
+              return (
+                <div key={m.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                  <TipoIcon size={12} className={`${color} flex-shrink-0`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-sm text-gray-900 truncate">{m.nombre}</p>
+                    <p className="text-[10px] text-gray-400 truncate">
+                      {tipo === 'rss' ? 'RSS' : tipo === 'gnews' ? 'Google News' : 'Scraping HTML'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
 
-      {/* Últimas noticias */}
+      {/* NOTICIAS RECIENTES */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 className="text-sm font-black text-gray-700 uppercase tracking-wide flex items-center gap-2">
+            <Newspaper size={14} className="text-gray-500" />
             Últimas noticias detectadas
           </h2>
           <Link
@@ -229,7 +389,11 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
         </div>
         {noticiasProv.length === 0 ? (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500">
-            Sin noticias detectadas todavía. Asegurate de tener medios configurados arriba.
+            {tieneMedios ? (
+              <>Sin noticias detectadas todavía. El scanner corre cada 4 horas.</>
+            ) : (
+              <>Agregá medios locales arriba para que el scanner empiece a detectar noticias.</>
+            )}
           </div>
         ) : (
           <div className="bg-white border rounded-xl divide-y divide-gray-100">
@@ -254,6 +418,16 @@ export default async function TableroProvinciaPage({ params }: { params: Params 
           </div>
         )}
       </section>
+
+      {/* Acceso rápido al mapa */}
+      <div className="mt-8 flex justify-center">
+        <Link
+          href="/mapa"
+          className="inline-flex items-center gap-2 text-xs font-bold text-gray-700 hover:text-[#E31E24] border border-gray-200 hover:border-[#E31E24] px-4 py-2 rounded-lg transition-colors"
+        >
+          <MapPin size={12} /> Ver {provincia.nombre} en el mapa
+        </Link>
+      </div>
     </div>
   )
 }
