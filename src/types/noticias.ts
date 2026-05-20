@@ -12,7 +12,9 @@ export interface NoticiaItem {
 export interface MedioLocal {
   id: number
   nombre: string
-  urlRss: string
+  // Al menos uno de los dos: urlRss (feed directo) o dominio (consulta Google News site:).
+  urlRss: string | null
+  dominio: string | null
   provinciaSlug: string
   activo: boolean
 }

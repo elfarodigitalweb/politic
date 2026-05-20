@@ -3,30 +3,66 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Rss } from 'lucide-react'
+import { Plus, Trash2, Rss, Globe } from 'lucide-react'
 import { PROVINCIAS_DISPLAY } from '@/types/noticias'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MedioDB = any
 
+function normalizarDominio(input: string): string {
+  let d = input.trim().toLowerCase()
+  d = d.replace(/^https?:\/\//, '')
+  d = d.replace(/^www\./, '')
+  d = d.split('/')[0]
+  d = d.split('?')[0]
+  return d
+}
+
 export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
   const [showForm, setShowForm] = useState(false)
   const [nombre, setNombre] = useState('')
   const [urlRss, setUrlRss] = useState('')
+  const [dominio, setDominio] = useState('')
   const [provincia, setProvincia] = useState('santa-cruz')
   const [saving, setSaving] = useState(false)
+  const [errorForm, setErrorForm] = useState<string | null>(null)
   const router = useRouter()
 
   async function handleAdd() {
-    if (!nombre.trim() || !urlRss.trim()) return
+    setErrorForm(null)
+    const nombreLimpio = nombre.trim()
+    const rssLimpio = urlRss.trim()
+    const dominioLimpio = dominio.trim() ? normalizarDominio(dominio) : ''
+
+    if (!nombreLimpio) {
+      setErrorForm('El nombre es obligatorio')
+      return
+    }
+    if (!rssLimpio && !dominioLimpio) {
+      setErrorForm('Tenés que cargar al menos un RSS o un dominio')
+      return
+    }
+    if (dominioLimpio && !dominioLimpio.includes('.')) {
+      setErrorForm('El dominio no parece válido (ej: opisantacruz.com.ar)')
+      return
+    }
+
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('medios_locales').insert({
-      nombre: nombre.trim(),
-      url_rss: urlRss.trim(),
+    const { error } = await supabase.from('medios_locales').insert({
+      nombre: nombreLimpio,
+      url_rss: rssLimpio || null,
+      dominio: dominioLimpio || null,
       provincia_slug: provincia,
     })
-    setNombre(''); setUrlRss(''); setShowForm(false); setSaving(false)
+    setSaving(false)
+
+    if (error) {
+      setErrorForm(error.message)
+      return
+    }
+
+    setNombre(''); setUrlRss(''); setDominio(''); setShowForm(false)
     router.refresh()
   }
 
@@ -46,7 +82,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
       <div className="flex justify-between items-center">
         <p className="text-sm text-gray-500">{medios.length} medios configurados</p>
         <button
-          onClick={() => setShowForm(v => !v)}
+          onClick={() => { setShowForm(v => !v); setErrorForm(null) }}
           className="flex items-center gap-2 bg-[#E31E24] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors"
         >
           <Plus size={16} /> Agregar medio
@@ -56,18 +92,43 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
       {showForm && (
         <div className="bg-white rounded-xl border p-4 space-y-3">
           <h3 className="font-bold text-gray-800 text-sm">Nuevo medio local</h3>
+
           <input
             value={nombre}
             onChange={e => setNombre(e.target.value)}
             placeholder="Nombre del medio *"
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
           />
-          <input
-            value={urlRss}
-            onChange={e => setUrlRss(e.target.value)}
-            placeholder="URL del feed RSS * (ej: https://medio.com/feed/)"
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-          />
+
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+            <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide mb-2">
+              Cargá al menos UNO de los dos:
+            </p>
+
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 mb-1">
+              <Rss size={11} className="text-orange-500" /> URL del feed RSS (preferido)
+            </label>
+            <input
+              value={urlRss}
+              onChange={e => setUrlRss(e.target.value)}
+              placeholder="https://medio.com/feed/"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
+            />
+
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 mb-1">
+              <Globe size={11} className="text-blue-500" /> Dominio (si el medio no tiene RSS)
+            </label>
+            <input
+              value={dominio}
+              onChange={e => setDominio(e.target.value)}
+              placeholder="opisantacruz.com.ar"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+            />
+            <p className="text-[10px] text-gray-500 mt-1.5">
+              Las noticias se buscarán vía Google News (operador <code>site:</code>) si no hay RSS.
+            </p>
+          </div>
+
           <select
             value={provincia}
             onChange={e => setProvincia(e.target.value)}
@@ -77,16 +138,23 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
               <option key={slug} value={slug}>{nombre}</option>
             ))}
           </select>
+
+          {errorForm && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded-lg">
+              {errorForm}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={handleAdd}
-              disabled={saving || !nombre.trim() || !urlRss.trim()}
+              disabled={saving || !nombre.trim()}
               className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 disabled:opacity-50"
             >
               {saving ? 'Guardando...' : 'Guardar'}
             </button>
             <button
-              onClick={() => setShowForm(false)}
+              onClick={() => { setShowForm(false); setErrorForm(null) }}
               className="text-gray-500 px-4 py-2 text-sm hover:text-gray-800"
             >
               Cancelar
@@ -106,7 +174,7 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
               <tr>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Medio</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Provincia</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Feed RSS</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Fuente</th>
                 <th className="px-4 py-3 w-12" />
               </tr>
             </thead>
@@ -114,16 +182,31 @@ export function MediosAdmin({ medios }: { medios: MedioDB[] }) {
               {medios.map((m: MedioDB) => (
                 <tr key={m.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    <div className="flex items-center gap-2">
-                      <Rss size={14} className="text-orange-500 flex-shrink-0" />
-                      {m.nombre}
-                    </div>
+                    {m.url_rss ? (
+                      <div className="flex items-center gap-2">
+                        <Rss size={14} className="text-orange-500 flex-shrink-0" />
+                        {m.nombre}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Globe size={14} className="text-blue-500 flex-shrink-0" />
+                        {m.nombre}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {PROVINCIAS_DISPLAY[m.provincia_slug] ?? m.provincia_slug}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-400 max-w-[200px] truncate">
-                    {m.url_rss}
+                  <td className="px-4 py-3 text-xs text-gray-400 max-w-[260px] truncate">
+                    {m.url_rss ? (
+                      <span title={m.url_rss}>RSS · {m.url_rss}</span>
+                    ) : m.dominio ? (
+                      <span title={`Google News site:${m.dominio}`}>
+                        Google News · site:{m.dominio}
+                      </span>
+                    ) : (
+                      <span className="text-red-400">Sin fuente</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

@@ -24,6 +24,7 @@ export default async function NoticiasPage() {
     mediosLocales.map(m => ({
       nombre: m.nombre,
       urlRss: m.urlRss,
+      dominio: m.dominio,
       provinciaSlug: m.provinciaSlug,
     }))
   ).catch((e) => {

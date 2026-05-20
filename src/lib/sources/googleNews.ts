@@ -55,3 +55,42 @@ export async function fetchNewsForKeywords(keywords: string[]): Promise<NewsItem
     return true
   })
 }
+
+// Normaliza un input cualquiera ("https://www.opisantacruz.com.ar/seccion") a "opisantacruz.com.ar"
+export function normalizarDominio(input: string): string {
+  let dominio = input.trim().toLowerCase()
+  dominio = dominio.replace(/^https?:\/\//, '')
+  dominio = dominio.replace(/^www\./, '')
+  dominio = dominio.split('/')[0]
+  dominio = dominio.split('?')[0]
+  return dominio
+}
+
+// Busca noticias recientes de un sitio sin RSS usando Google News con site:dominio
+// El operador `site:` instruye a Google a devolver solo URLs de ese dominio.
+// La fuente en el resultado lleva el nombre del medio (no "google_news") para que
+// el scanner de SC lo trate como fuente local y no filtre por localidad en el título.
+export async function fetchGoogleNewsForSite(
+  dominio: string,
+  nombreMedio: string
+): Promise<NewsItem[]> {
+  const dominioNorm = normalizarDominio(dominio)
+  if (!dominioNorm || !dominioNorm.includes('.')) return []
+
+  const parser = new Parser({ timeout: 10000 })
+  try {
+    const url = buildGoogleNewsUrl(`site:${dominioNorm}`)
+    const parsed = await parser.parseURL(url)
+    const recent = filterRecentItems(parsed.items ?? [], 14)
+    return recent
+      .map(item => ({
+        titulo: extractText(item.title ?? ''),
+        url: item.link ?? null,
+        publicadoAt: item.pubDate ?? new Date().toISOString(),
+        fuente: nombreMedio,
+      }))
+      .filter(item => item.titulo.length > 0)
+  } catch {
+    return []
+  }
+}

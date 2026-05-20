@@ -3,7 +3,7 @@
 // Categoría y severidad son bonus — si no hay keywords de problema → "General/1"
 
 import { fetchAllRSSFeeds, FUENTES_SC, medioToFeed } from './rss'
-import { fetchNewsForKeywords } from './googleNews'
+import { fetchNewsForKeywords, fetchGoogleNewsForSite } from './googleNews'
 import { getMediosLocales } from '@/lib/supabase/medios-queries'
 
 export interface ProblemaDetectado {
@@ -185,22 +185,29 @@ function detectarCategoria(texto: string): { categoria: string; severidad: 1 | 2
 export async function escanearProblematicas(): Promise<ProblemaDetectado[]> {
   // Cargar medios que el admin agregó en /admin/medios (siempre actualizados)
   const mediosLocales = await getMediosLocales().catch(() => [])
+
+  // Medios con RSS → feed directo. Medios sin RSS pero con dominio → Google News site:
   const extraFeeds = mediosLocales
     .filter(m => m.urlRss)
-    .map(m => medioToFeed({ nombre: m.nombre, urlRss: m.urlRss, provinciaSlug: m.provinciaSlug }))
+    .map(m => medioToFeed({ nombre: m.nombre, urlRss: m.urlRss as string, provinciaSlug: m.provinciaSlug }))
+
+  const mediosPorDominio = mediosLocales.filter(m => !m.urlRss && m.dominio)
 
   // Agregar fuentes locales SC al set de detección prioritaria
   for (const m of mediosLocales) {
     FUENTES_SC.add(m.nombre)
   }
 
-  const [rssItems, googleSC1, googleSC2] = await Promise.all([
+  const [rssItems, googleSC1, googleSC2, ...itemsPorDominio] = await Promise.all([
     fetchAllRSSFeeds(extraFeeds).catch(() => []),
     fetchNewsForKeywords(['Santa Cruz Argentina noticias Río Gallegos']).catch(() => []),
     fetchNewsForKeywords(['Caleta Olivia Las Heras Pico Truncado El Calafate']).catch(() => []),
+    ...mediosPorDominio.map(m =>
+      fetchGoogleNewsForSite(m.dominio as string, m.nombre).catch(() => [])
+    ),
   ])
 
-  const todasNoticias = [...rssItems, ...googleSC1, ...googleSC2]
+  const todasNoticias = [...rssItems, ...googleSC1, ...googleSC2, ...itemsPorDominio.flat()]
   const problemas: ProblemaDetectado[] = []
   const urlsVistas = new Set<string>()
 

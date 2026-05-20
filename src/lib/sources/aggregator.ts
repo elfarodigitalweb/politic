@@ -65,22 +65,55 @@ async function fetchFeed(source: FeedSource): Promise<NoticiaItem[]> {
 
 export interface MedioInput {
   nombre: string
-  urlRss: string
+  urlRss: string | null
+  dominio?: string | null
   provinciaSlug: string
+}
+
+async function fetchSiteViaGoogleNews(medio: MedioInput): Promise<NoticiaItem[]> {
+  if (!medio.dominio) return []
+  const { fetchGoogleNewsForSite } = await import('./googleNews')
+  const items = await fetchGoogleNewsForSite(medio.dominio, medio.nombre)
+  return items
+    .filter(it => it.url)
+    .map(it => ({
+      id: buildNoticiaId(`${it.url}-${medio.provinciaSlug}`),
+      titulo: it.titulo,
+      url: it.url as string,
+      fuente: medio.nombre,
+      provinciaSlug: medio.provinciaSlug,
+      provinciaNombre: getProvinciaNombre(medio.provinciaSlug),
+      publicadoAt: it.publicadoAt,
+    }))
 }
 
 export async function fetchTodasLasNoticias(
   mediosLocales: MedioInput[] = []
 ): Promise<NoticiaItem[]> {
-  const fuentesLocales: FeedSource[] = mediosLocales.map(m => ({
-    nombre: m.nombre,
-    url: m.urlRss,
-    provincia: m.provinciaSlug,
-  }))
+  // Medios con RSS → feed normal
+  const fuentesRSS: FeedSource[] = mediosLocales
+    .filter(m => m.urlRss)
+    .map(m => ({
+      nombre: m.nombre,
+      url: m.urlRss as string,
+      provincia: m.provinciaSlug,
+    }))
 
-  const todasFuentes = [...FEEDS_NACIONALES, ...fuentesLocales]
-  const results = await Promise.allSettled(todasFuentes.map(fetchFeed))
-  const todas = results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+  // Medios sin RSS pero con dominio → Google News site:
+  const mediosPorDominio = mediosLocales.filter(m => !m.urlRss && m.dominio)
+
+  const todasFuentes = [...FEEDS_NACIONALES, ...fuentesRSS]
+  const [rssResults, ...porDominio] = await Promise.all([
+    Promise.allSettled(todasFuentes.map(fetchFeed)),
+    ...mediosPorDominio.map(m =>
+      fetchSiteViaGoogleNews(m).catch(() => [] as NoticiaItem[])
+    ),
+  ])
+
+  const todas = [
+    ...rssResults.flatMap(r => r.status === 'fulfilled' ? r.value : []),
+    ...porDominio.flat(),
+  ]
 
   const seen = new Set<string>()
   const deduplicadas = todas.filter(item => {

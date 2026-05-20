@@ -6,7 +6,8 @@ function mapMedioRow(row: any): MedioLocal {
   return {
     id: row.id,
     nombre: row.nombre,
-    urlRss: row.url_rss,
+    urlRss: row.url_rss ?? null,
+    dominio: row.dominio ?? null,
     provinciaSlug: row.provincia_slug,
     activo: row.activo,
   }
