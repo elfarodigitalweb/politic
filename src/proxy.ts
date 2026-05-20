@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// Rutas que NO requieren login (todo lo demás está protegido)
+// Rutas que NO requieren login (todo lo demás está protegido).
+// La portada `/` es pública para que cualquier visitante vea las 8 tarjetas
+// de los módulos; al hacer click en "Explorar" se redirige a /admin/login.
 const RUTAS_PUBLICAS = [
+  '/',
   '/admin/login',
 ]
 
