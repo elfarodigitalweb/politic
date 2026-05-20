@@ -26,7 +26,10 @@ export default async function NoticiasPage() {
       urlRss: m.urlRss,
       provinciaSlug: m.provinciaSlug,
     }))
-  )
+  ).catch((e) => {
+    console.error('[NoticiasPage] error en fetchTodasLasNoticias:', e)
+    return []
+  })
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">

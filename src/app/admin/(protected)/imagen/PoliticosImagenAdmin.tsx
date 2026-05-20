@@ -4,7 +4,7 @@ import { useState, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Trash2, BarChart2, TrendingUp, TrendingDown, Edit2, Check, X, FileText, ExternalLink, Sparkles } from 'lucide-react'
+import { Plus, Trash2, BarChart2, TrendingUp, TrendingDown, Edit2, Check, X, FileText, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
 
 interface ImagenActual {
   imagenPositiva: number
@@ -55,13 +55,38 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
   const [scanMsg, setScanMsg] = useState('')
   const [seedLoading, setSeedLoading] = useState(false)
   const [seedMsg, setSeedMsg] = useState('')
+  const [iaLoadingId, setIaLoadingId] = useState<number | null>(null)
+  const [iaMsg, setIaMsg] = useState('')
   const router = useRouter()
+
+  async function analizarConIA(politicoId: number, nombre: string) {
+    setIaLoadingId(politicoId)
+    setIaMsg('')
+    try {
+      const secret = process.env.NEXT_PUBLIC_ANALIZAR_SECRET ?? 'portal-politico-secret-2026'
+      const res = await fetch('/api/analizar-politico-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+        body: JSON.stringify({ politicoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setIaMsg(`✗ ${nombre}: ${data.error ?? 'Error desconocido'}`)
+      } else {
+        setIaMsg(`✓ ${nombre}: ${data.imagen_positiva.toFixed(1)}% pos / ${data.imagen_negativa.toFixed(1)}% neg · tendencia ${data.tendencia}`)
+        router.refresh()
+      }
+    } catch {
+      setIaMsg(`✗ ${nombre}: error de conexión`)
+    }
+    setIaLoadingId(null)
+  }
 
   async function handleAdd() {
     if (!nombre.trim()) return
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('politicos').insert({
+    const { data: insertado } = await supabase.from('politicos').insert({
       nombre: nombre.trim(),
       slug: toSlug(nombre),
       cargo,
@@ -72,7 +97,29 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
       facebook_page_id: facebookPageId.trim() || null,
       foto_url: fotoUrl.trim() || null,
       en_testeo: enTesteo,
-    })
+    }).select('id, nombre').single()
+
+    // Disparar análisis IA automáticamente para el nuevo político
+    if (insertado?.id) {
+      setIaMsg(`⏳ Analizando ${insertado.nombre} con IA...`)
+      try {
+        const secret = process.env.NEXT_PUBLIC_ANALIZAR_SECRET ?? 'portal-politico-secret-2026'
+        const res = await fetch('/api/analizar-politico-ia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+          body: JSON.stringify({ politicoId: insertado.id }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setIaMsg(`✓ ${insertado.nombre}: ${data.imagen_positiva.toFixed(1)}% pos / ${data.imagen_negativa.toFixed(1)}% neg`)
+        } else {
+          setIaMsg(`⚠ Político creado pero IA falló: ${data.error ?? 'desconocido'}`)
+        }
+      } catch {
+        setIaMsg('⚠ Político creado pero IA falló por conexión')
+      }
+    }
+
     setNombre(''); setKeywords(''); setPartidoNombre('')
     setPartidoColor('#94a3b8'); setFacebookPageId(''); setFotoUrl(''); setShowForm(false); setSaving(false)
     router.refresh()
@@ -209,7 +256,62 @@ export function PoliticosImagenAdmin({ politicos }: { politicos: PoliticoDB[] })
           <button onClick={handleTriggerAnalisis} disabled={triggerLoading}
             className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-900 disabled:opacity-50 transition-colors">
             <BarChart2 size={16} />
-            {triggerLoading ? 'Analizando...' : 'Ejecutar análisis'}
+            {triggerLoading ? 'Analizando...' : 'Ejecutar análisis (RSS)'}
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm(`LIMPIAR datos extremos (100%/0%) y RE-ANALIZAR los ${politicos.length} políticos con IA?\n\nTarda ~1-2 min.`)) return
+              setIaMsg(`⏳ Limpiando datos extremos del historial...`)
+              const secret = process.env.NEXT_PUBLIC_ANALIZAR_SECRET ?? 'portal-politico-secret-2026'
+
+              // Paso 1: limpiar basura
+              try {
+                const cleanRes = await fetch('/api/limpiar-extremos', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${secret}` },
+                })
+                const cleanData = await cleanRes.json()
+                setIaMsg(`🧹 ${cleanData.borradasExtremos ?? 0} extremos + ${cleanData.borradasPocasMenciones ?? 0} pocas menciones eliminados. Re-analizando con IA...`)
+              } catch {
+                setIaMsg(`⚠ Error limpiando, sigo igual...`)
+              }
+
+              await new Promise(r => setTimeout(r, 500))
+
+              // Paso 2: re-analizar todos con IA — 5s entre llamadas (límite gratis: 15 req/min)
+              let ok = 0
+              let fail = 0
+              let cuotaAgotada = false
+              for (let i = 0; i < politicos.length; i++) {
+                if (cuotaAgotada) break
+                const p = politicos[i]
+                setIaMsg(`⏳ Analizando ${p.nombre} (${i + 1}/${politicos.length}) · ~${Math.ceil((politicos.length - i) * 5 / 60)} min restantes`)
+                try {
+                  const res = await fetch('/api/analizar-politico-ia', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+                    body: JSON.stringify({ politicoId: p.id }),
+                  })
+                  if (res.ok) {
+                    ok++
+                  } else {
+                    fail++
+                    const data = await res.json().catch(() => ({}))
+                    if (String(data.error ?? '').toLowerCase().includes('cuota')) {
+                      cuotaAgotada = true
+                      setIaMsg(`⚠ Cuota agotada · ${ok} OK · esperá 1 min y reintentá`)
+                    }
+                  }
+                } catch { fail++ }
+                if (!cuotaAgotada) await new Promise(r => setTimeout(r, 5000))
+              }
+              if (!cuotaAgotada) setIaMsg(`✓ Listo · ${ok} actualizados con IA · ${fail} fallidos`)
+              router.refresh()
+            }}
+            disabled={iaLoadingId !== null}
+            className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-violet-700 disabled:opacity-50 transition-colors">
+            <Wand2 size={15} />
+            Limpiar + Re-analizar con IA
           </button>
           <button onClick={() => setShowForm(v => !v)}
             className="flex items-center gap-2 bg-[#E31E24] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors">
@@ -244,6 +346,11 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
               </pre>
             </details>
           )}
+        </div>
+      )}
+      {iaMsg && (
+        <div className={`text-sm px-4 py-2 rounded-lg ${iaMsg.startsWith('✓') ? 'bg-violet-50 text-violet-700' : iaMsg.startsWith('⏳') ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-600'}`}>
+          {iaMsg}
         </div>
       )}
       {scanMsg && (
@@ -392,6 +499,16 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
                         <ExternalLink size={11} />
                         Informe
                       </Link>
+                      {/* Analizar con IA */}
+                      <button
+                        onClick={() => analizarConIA(p.id, p.nombre)}
+                        disabled={iaLoadingId === p.id}
+                        className="flex items-center gap-1 text-xs text-violet-700 hover:text-violet-900 border border-violet-200 hover:border-violet-400 px-2 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                        title="Analizar imagen con IA (Gemini)"
+                      >
+                        <Wand2 size={11} />
+                        {iaLoadingId === p.id ? '...' : 'IA'}
+                      </button>
                       {/* Cargar % manual */}
                       <button
                         onClick={() => {
@@ -402,7 +519,7 @@ CREATE POLICY "prob_write" ON problematicas_sc FOR ALL USING (true) WITH CHECK (
                         title="Cargar % manualmente"
                       >
                         <Edit2 size={11} />
-                        Cargar %
+                        Manual
                       </button>
                       {/* Eliminar */}
                       <button onClick={() => handleDelete(p.id, p.nombre)}

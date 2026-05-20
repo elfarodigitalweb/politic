@@ -1,0 +1,54 @@
+name: Rumbo Estratégico · Cron automático
+
+# Ejecuta análisis y genera clippings 3 veces al día (Argentina UTC-3)
+# Todos los horarios en UTC. Hora ARG = UTC - 3.
+
+on:
+  schedule:
+    # ☀️ MATUTINO — 08:00 ARG = 11:00 UTC
+    - cron: '0 11 * * *'
+    # 🌤️ TARDE — 14:00 ARG = 17:00 UTC
+    - cron: '0 17 * * *'
+    # 🌙 NOCTURNO — 21:00 ARG = 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # permite correr manualmente desde GitHub
+
+jobs:
+  ciclo-completo:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Determinar tipo de clipping según hora
+        id: tipo
+        run: |
+          HOUR=$(date -u +%H)
+          if [ "$HOUR" -ge 10 ] && [ "$HOUR" -lt 16 ]; then
+            echo "tipo=matutino" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" -ge 16 ] && [ "$HOUR" -lt 22 ]; then
+            echo "tipo=tarde" >> $GITHUB_OUTPUT
+          else
+            echo "tipo=nocturno" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 1️⃣ Análisis de imagen política
+        run: |
+          curl -X POST "${{ secrets.PORTAL_URL }}/api/analizar" \
+            -H "Authorization: Bearer ${{ secrets.ANALIZAR_SECRET }}" \
+            --max-time 120 || echo "Falló análisis (continúa)"
+
+      - name: 2️⃣ Escanear alertas SC
+        run: |
+          curl -X POST "${{ secrets.PORTAL_URL }}/api/escanear-sc" \
+            -H "Authorization: Bearer ${{ secrets.ANALIZAR_SECRET }}" \
+            --max-time 120 || echo "Falló escaneo (continúa)"
+
+      - name: 3️⃣ Generar clipping ${{ steps.tipo.outputs.tipo }}
+        run: |
+          curl -X POST "${{ secrets.PORTAL_URL }}/api/generar-clipping?tipo=${{ steps.tipo.outputs.tipo }}" \
+            -H "Authorization: Bearer ${{ secrets.ANALIZAR_SECRET }}" \
+            --max-time 180
+
+      - name: Reporte final
+        run: |
+          echo "✅ Ciclo completado para tipo: ${{ steps.tipo.outputs.tipo }}"
+          echo "Hora UTC: $(date -u)"

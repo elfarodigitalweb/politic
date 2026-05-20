@@ -1,4 +1,5 @@
 import { createClient } from './server'
+import { createServiceClient } from './service'
 import type { Politico, Mencion, ImagenHistorico, ImagenActual, PoliticoConImagen } from '@/types/imagen'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,13 +86,63 @@ export async function getPoliticoBySlug(slug: string): Promise<Politico | null> 
 }
 
 export async function getUltimaImagen(politicoId: number): Promise<ImagenHistorico | null> {
-  const supabase = await createClient()
+  // Service client (bypassa RLS) + filtra extremos — igual que el admin
+  const supabase = createServiceClient()
   const { data } = await supabase
     .from('imagen_historico').select('*')
     .eq('politico_id', politicoId)
     .order('calculado_at', { ascending: false })
-    .limit(1).single()
-  return data ? mapImagenRow(data) : null
+    .limit(20)
+  // Retornar el primer valor que no sea extremo (≤5% o ≥95%)
+  for (const row of data ?? []) {
+    const pos = Number(row.imagen_positiva)
+    const neg = Number(row.imagen_negativa)
+    if (pos > 5 && pos < 95 && neg > 5 && neg < 95) return mapImagenRow(row)
+  }
+  return null
+}
+
+// Carga imagen válida para múltiples políticos en una sola query (para el Tablero)
+export async function getImagenesPoliticos(
+  slugs: string[]
+): Promise<Map<string, { imagenPositiva: number; imagenNegativa: number }>> {
+  if (slugs.length === 0) return new Map()
+  const supabase = createServiceClient()
+
+  // 1. Buscar IDs de los políticos por slug
+  const { data: politicos } = await supabase
+    .from('politicos')
+    .select('id, slug')
+    .in('slug', slugs)
+
+  if (!politicos || politicos.length === 0) return new Map()
+
+  const ids = politicos.map(p => p.id)
+  const slugPorId = new Map(politicos.map(p => [p.id, p.slug]))
+
+  // 2. Traer todos los registros recientes de una vez
+  const { data: imagenes } = await supabase
+    .from('imagen_historico')
+    .select('politico_id, imagen_positiva, imagen_negativa, calculado_at')
+    .in('politico_id', ids)
+    .order('calculado_at', { ascending: false })
+
+  // 3. Para cada político, tomar el primer registro no extremo
+  const resultado = new Map<string, { imagenPositiva: number; imagenNegativa: number }>()
+  const visto = new Set<number>()
+
+  for (const img of imagenes ?? []) {
+    if (visto.has(img.politico_id)) continue
+    const pos = Number(img.imagen_positiva)
+    const neg = Number(img.imagen_negativa)
+    if (pos > 5 && pos < 95 && neg > 5 && neg < 95) {
+      const slug = slugPorId.get(img.politico_id)
+      if (slug) resultado.set(slug, { imagenPositiva: pos, imagenNegativa: neg })
+      visto.add(img.politico_id)
+    }
+  }
+
+  return resultado
 }
 
 export async function getHistorialImagen(

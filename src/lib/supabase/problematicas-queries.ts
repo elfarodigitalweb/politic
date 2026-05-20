@@ -80,8 +80,10 @@ export async function getProblematicasRecientes(
     .from('problematicas_sc')
     .select('*')
     .gte('publicado_at', desde)
-    .order('severidad', { ascending: false })
+    // Recencia primero, severidad como secundaria — así las alertas frescas
+    // no quedan tapadas por alertas viejas de severidad alta.
     .order('publicado_at', { ascending: false })
+    .order('severidad', { ascending: false })
     .limit(limit)
   return (data ?? []).map(mapRow)
 }

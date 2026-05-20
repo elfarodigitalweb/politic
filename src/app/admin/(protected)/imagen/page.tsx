@@ -1,8 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { PoliticosImagenAdmin } from './PoliticosImagenAdmin'
 
+export const revalidate = 0
+
 export default async function ImagenAdminPage() {
-  const supabase = await createClient()
+  // Service client → bypassa RLS, garantiza ver TODOS los datos siempre
+  const supabase = createServiceClient()
 
   const [{ data: politicos }, { data: imagenes }] = await Promise.all([
     supabase.from('politicos').select('*').order('nombre'),
@@ -12,16 +15,20 @@ export default async function ImagenAdminPage() {
       .order('calculado_at', { ascending: false }),
   ])
 
-  // Última imagen por político (el primer resultado ya viene ordenado desc)
+  // Última imagen por político — ignorar valores extremos (≤5 o ≥95)
+  // que son basura del analyzer viejo, retroceder a la siguiente
   const imagenMap = new Map<number, { imagenPositiva: number; imagenNegativa: number; calculadoAt: string }>()
   for (const img of imagenes ?? []) {
-    if (!imagenMap.has(img.politico_id)) {
-      imagenMap.set(img.politico_id, {
-        imagenPositiva: Number(img.imagen_positiva),
-        imagenNegativa: Number(img.imagen_negativa),
-        calculadoAt: img.calculado_at,
-      })
-    }
+    if (imagenMap.has(img.politico_id)) continue
+    const pos = Number(img.imagen_positiva)
+    const neg = Number(img.imagen_negativa)
+    // Saltar valores extremos
+    if (pos >= 95 || pos <= 5 || neg >= 95 || neg <= 5) continue
+    imagenMap.set(img.politico_id, {
+      imagenPositiva: pos,
+      imagenNegativa: neg,
+      calculadoAt: img.calculado_at,
+    })
   }
 
   const politicosConImagen = (politicos ?? []).map(p => ({

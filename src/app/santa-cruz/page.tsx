@@ -2,19 +2,21 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { getCiudadesSantaCruz } from '@/lib/supabase/queries'
 import { getProblematicasRecientes } from '@/lib/supabase/problematicas-queries'
-import { getPoliticoBySlug, getUltimaImagen, getMencionesNegativasSC } from '@/lib/supabase/politicos-queries'
+import { getPoliticoBySlug, getUltimaImagen, getMencionesNegativasSC, getImagenesPoliticos } from '@/lib/supabase/politicos-queries'
 import { getUltimaEncuesta } from '@/lib/supabase/encuestas-queries'
-import { CATEGORIA_EMOJIS, CATEGORIA_COLORES, SEVERIDAD_COLORES, SEVERIDAD_LABELS } from '@/lib/sources/problematicas-sc'
+import { CATEGORIA_EMOJIS, CATEGORIA_COLORES, SEVERIDAD_COLORES, SEVERIDAD_LABELS, escanearProblematicas } from '@/lib/sources/problematicas-sc'
+import { guardarProblematicas } from '@/lib/supabase/problematicas-queries'
 import { ALERTAS_SC_SEED, type AlertaSeed } from '@/lib/sources/alertas-sc-seed'
 import { TrendingUp, TrendingDown, MapPin, AlertTriangle, CheckCircle, Newspaper, BarChart3, ExternalLink, ShieldAlert } from 'lucide-react'
 import { timeAgo } from '@/lib/utils/date'
+import RefreshAlertsButton from './RefreshAlertsButton'
 
 export const metadata: Metadata = {
   title: 'Santa Cruz — Tablero Político Provincial',
   description: 'Monitoreo político completo de Santa Cruz: gobernador, municipios, intendentes y alertas locales.',
 }
 
-export const revalidate = 300
+export const revalidate = 60
 
 // Mapeo ciudad slug → intendente slug (para link al perfil)
 const CIUDAD_INTENDENTE: Record<string, string> = {
@@ -57,17 +59,97 @@ const CIUDAD_INTENDENTE_NOMBRE: Record<string, string> = {
 }
 
 export default async function SantaCruzPage() {
-  const [ciudades, problemasDB, gobernador, mencionesNeg] = await Promise.all([
+  // Todos los slugs de intendentes + gobernador para traer sus imágenes de una vez
+  const todosLosSlugsPoliticos = [
+    'claudio-vidal',
+    ...Object.values(CIUDAD_INTENDENTE),
+  ]
+
+  // Tope DURO: 10 días. Nada más viejo se muestra. Si la BD/scanner no tienen
+  // novedades en los últimos 10 días, la página queda vacía con CTA a refrescar.
+  const VENTANA_DIAS = 10
+  const limiteMs = Date.now() - VENTANA_DIAS * 86_400_000
+  const esReciente = (fechaISO: string) =>
+    new Date(fechaISO).getTime() >= limiteMs
+
+  // En PARALELO: BD (10 días) + escaneo en vivo de RSS/Google News.
+  // El escaneo en vivo garantiza que SIEMPRE veamos lo último publicado,
+  // aunque nadie haya tocado el botón "Refrescar alertas".
+  const [
+    ciudades,
+    gobernador,
+    imagenesMap,
+    problemasDBRaw,
+    mencionesNegRaw,
+    alertasLive,
+  ] = await Promise.all([
     getCiudadesSantaCruz().catch(() => []),
-    getProblematicasRecientes(14, 100).catch(() => []),
     getPoliticoBySlug('claudio-vidal').catch(() => null),
-    getMencionesNegativasSC(14, 80).catch(() => []),
+    getImagenesPoliticos(todosLosSlugsPoliticos).catch(() => new Map()),
+    getProblematicasRecientes(VENTANA_DIAS, 200).catch(() => []),
+    getMencionesNegativasSC(VENTANA_DIAS, 80).catch(() => []),
+    escanearProblematicas().catch(() => []),
   ])
 
-  const imagenGob = gobernador ? await getUltimaImagen(gobernador.id).catch(() => null) : null
+  // Filtro defensivo: solo items dentro de la ventana de 10 días.
+  const mencionesNeg = mencionesNegRaw.filter(m => esReciente(m.publicadoAt))
+
+  // Persistir en background los items nuevos del escaneo en vivo (sólo recientes)
+  const liveRecientes = alertasLive.filter(p => esReciente(p.publicadoAt))
+  if (liveRecientes.length > 0) {
+    guardarProblematicas(liveRecientes).catch(() => {})
+  }
+
+  // Combinar BD + live, dedupe por URL (y por título si no hay URL),
+  // descartando todo lo que esté fuera de la ventana.
+  type ProblemaCombinado = {
+    id: number
+    localidadSlug: string
+    localidadNombre: string
+    categoria: string
+    titulo: string
+    fuenteNombre: string
+    url: string | null
+    severidad: 1 | 2 | 3
+    publicadoAt: string
+  }
+
+  const vistos = new Set<string>()
+  const combinados: ProblemaCombinado[] = []
+  let idSintetico = 100000
+
+  // Primero los live (suelen ser los más frescos), luego BD
+  for (const p of liveRecientes) {
+    const key = p.url ?? `t:${p.titulo}`
+    if (vistos.has(key)) continue
+    vistos.add(key)
+    combinados.push({ ...p, id: idSintetico++ })
+  }
+  for (const p of problemasDBRaw) {
+    if (!esReciente(p.publicadoAt)) continue
+    const key = p.url ?? `t:${p.titulo}`
+    if (vistos.has(key)) continue
+    vistos.add(key)
+    combinados.push(p)
+  }
+
+  // Ordenar por fecha desc (lo más nuevo primero, siempre)
+  combinados.sort((a, b) =>
+    new Date(b.publicadoAt).getTime() - new Date(a.publicadoAt).getTime()
+  )
+
+  const problemasDB = combinados
+
+  // Imagen del gobernador desde imagen_historico (misma fuente que el admin)
+  const imagenGob = imagenesMap.get('claudio-vidal')
+    ? { imagenPositiva: imagenesMap.get('claudio-vidal')!.imagenPositiva, imagenNegativa: imagenesMap.get('claudio-vidal')!.imagenNegativa }
+    : gobernador ? await getUltimaImagen(gobernador.id).catch(() => null) : null
   const encuestaGob = gobernador ? await getUltimaEncuesta(gobernador.id).catch(() => null) : null
 
-  // Usar datos de la DB si hay, sino usar el seed hardcodeado
+  // Solo datos reales recientes — sin fallback al seed con fechas viejas.
+  // Si el seed tuviera items dentro de la ventana, se incluyen; si no, se descarta.
+  const seedReciente = ALERTAS_SC_SEED.filter(p => esReciente(p.publicadoAt))
+
   const problemasRecientes: AlertaSeed[] = problemasDB.length > 0
     ? problemasDB.map(p => ({
         id: p.id,
@@ -80,9 +162,9 @@ export default async function SantaCruzPage() {
         severidad: p.severidad,
         publicadoAt: p.publicadoAt,
       }))
-    : ALERTAS_SC_SEED
+    : seedReciente
 
-  const usandoSeed = problemasDB.length === 0
+  const usandoSeed = problemasDB.length === 0 && problemasRecientes.length > 0
 
   // Agrupar alertas por localidad
   const alertasPorLocalidad = problemasRecientes.reduce<Record<string, AlertaSeed[]>>((acc, p) => {
@@ -99,15 +181,28 @@ export default async function SantaCruzPage() {
     return acc
   }, {})
 
-  // Localidades con alertas, ordenadas por severidad máxima
+  // Localidades con alertas. Dentro de cada localidad: las alertas se muestran
+  // por fecha desc (lo último primero). Para ordenar las localidades entre sí
+  // combinamos severidad + recencia: una sev-3 reciente pesa más que una sev-3
+  // vieja, así una localidad con noticias frescas siempre sube al tope.
+  const ahora = Date.now()
+  const scoreAlerta = (sev: number, fecha: string) => {
+    const diasAtras = Math.max(0, (ahora - new Date(fecha).getTime()) / 86_400_000)
+    const decaimiento = Math.max(0, 1 - diasAtras / VENTANA_DIAS) // 0 a 5 días
+    return sev * 1000 * decaimiento + (sev * 10) // piso mínimo por severidad
+  }
+
   const localidadesConAlertas = Object.entries(alertasPorLocalidad)
     .map(([slug, alertas]) => ({
       slug,
-      alertas: alertas.sort((a, b) => b.severidad - a.severidad),
+      alertas: alertas.sort((a, b) =>
+        new Date(b.publicadoAt).getTime() - new Date(a.publicadoAt).getTime()
+      ),
       severidadMax: Math.max(...alertas.map(a => a.severidad)) as 1 | 2 | 3,
+      scoreMax: Math.max(...alertas.map(a => scoreAlerta(a.severidad, a.publicadoAt))),
       nombre: alertas[0]?.localidadNombre ?? slug,
     }))
-    .sort((a, b) => b.severidadMax - a.severidadMax || b.alertas.length - a.alertas.length)
+    .sort((a, b) => b.scoreMax - a.scoreMax || b.alertas.length - a.alertas.length)
 
   const riesgoPorLocalidad = Object.fromEntries(
     Object.entries(alertasPorLocalidad).map(([slug, ps]) => [
@@ -137,10 +232,11 @@ export default async function SantaCruzPage() {
           </div>
           <h1 className="text-3xl font-black text-gray-900">Tablero Político Provincial</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Monitoreo en tiempo real · 16 localidades · {usandoSeed ? 'Datos verificados mayo 2026' : 'Alertas actualizadas'}
+            Monitoreo en tiempo real · 16 localidades · Últimos {VENTANA_DIAS} días
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <RefreshAlertsButton />
           <Link href="/mapa"
             className="flex items-center gap-1.5 text-sm font-bold text-gray-700 hover:text-[#E31E24] border border-gray-200 hover:border-[#E31E24] px-3 py-2 rounded-lg transition-colors">
             <MapPin size={14} /> Ver mapa
@@ -201,7 +297,9 @@ export default async function SantaCruzPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         <div className="bg-white border rounded-xl p-4">
           <p className="text-2xl font-black text-gray-900">{problemasRecientes.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Alertas esta semana</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Alertas últimos {VENTANA_DIAS} días
+          </p>
         </div>
         <div className="bg-white border rounded-xl p-4">
           <p className="text-2xl font-black text-gray-900">{localidadesConAlertas.length}</p>
@@ -232,6 +330,17 @@ export default async function SantaCruzPage() {
             </span>
           )}
         </h2>
+
+        {localidadesConAlertas.length === 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center">
+            <p className="text-sm font-bold text-gray-700">
+              Sin alertas en los últimos {VENTANA_DIAS} días
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Tocá <span className="font-bold">Refrescar alertas</span> arriba para escanear medios locales y Google News.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-4">
           {localidadesConAlertas.map(({ slug, nombre, alertas, severidadMax }) => {
@@ -394,17 +503,25 @@ export default async function SantaCruzPage() {
                   )}
                 </div>
 
-                {/* Imagen política */}
-                {ciudad?.imagenPositiva != null && (
-                  <div className="flex items-center gap-3 mb-2 text-xs">
-                    <span className="flex items-center gap-0.5 text-green-600 font-bold">
-                      <TrendingUp size={11} />{ciudad.imagenPositiva.toFixed(0)}%
-                    </span>
-                    <span className="flex items-center gap-0.5 text-red-500 font-bold">
-                      <TrendingDown size={11} />{(ciudad.imagenNegativa ?? 0).toFixed(0)}%
-                    </span>
-                  </div>
-                )}
+                {/* Imagen política — desde imagen_historico (misma fuente que el admin) */}
+                {(() => {
+                  const imgPol = intendenteSlug ? imagenesMap.get(intendenteSlug) : null
+                  const imgFallback = ciudad?.imagenPositiva != null
+                    ? { imagenPositiva: ciudad.imagenPositiva, imagenNegativa: ciudad.imagenNegativa ?? 0 }
+                    : null
+                  const img = imgPol ?? imgFallback
+                  if (!img) return null
+                  return (
+                    <div className="flex items-center gap-3 mb-2 text-xs">
+                      <span className="flex items-center gap-0.5 text-green-600 font-bold">
+                        <TrendingUp size={11} />{img.imagenPositiva.toFixed(1)}%
+                      </span>
+                      <span className="flex items-center gap-0.5 text-red-500 font-bold">
+                        <TrendingDown size={11} />{img.imagenNegativa.toFixed(1)}%
+                      </span>
+                    </div>
+                  )
+                })()}
 
                 {/* Última alerta */}
                 {alertas[0] && (

@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getUltimoClipping, getHistorialClippings } from '@/lib/supabase/clippings-queries'
 import { GenerarClippingButton } from './GenerarClippingButton'
-import { Clock, FileText, Printer, ChevronRight } from 'lucide-react'
+import { PrintButton } from './PrintButton'
+import { Clock, FileText, ChevronRight } from 'lucide-react'
 
 export const revalidate = 0
 
@@ -62,13 +63,7 @@ export default async function ClippingPage() {
           )}
         </div>
         <div className="flex items-center gap-2 print:hidden">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 px-3 py-2 rounded-lg transition-colors"
-          >
-            <Printer size={14} />
-            Imprimir
-          </button>
+          <PrintButton />
           <GenerarClippingButton />
         </div>
       </div>
