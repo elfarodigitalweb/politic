@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { MapPin, TrendingUp, Newspaper, GitCompare, BarChart3, FileText, Sparkles, Activity, ArrowUpRight } from 'lucide-react'
+import { MapPin, TrendingUp, Newspaper, GitCompare, BarChart3, FileText, Sparkles, Activity, ArrowUpRight, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { timeAgo } from '@/lib/utils/date'
 
@@ -18,16 +18,36 @@ const MODULES = [
 
 export default async function HomePage() {
   const supabase = await createClient()
-  const [{ count: totalPoliticos }, { data: ultimaImagen }] = await Promise.all([
+  const [{ count: totalPoliticos }, { data: ultimaImagen }, { data: { user } }] = await Promise.all([
     supabase.from('politicos').select('*', { count: 'exact', head: true }).eq('activo', true),
     supabase.from('imagen_historico').select('calculado_at').order('calculado_at', { ascending: false }).limit(1),
+    supabase.auth.getUser(),
   ])
   const ultimaActualizacion = ultimaImagen?.[0]?.calculado_at
     ? timeAgo(ultimaImagen[0].calculado_at)
     : 'sin datos'
+  const noLogueado = !user
 
   return (
     <div className="max-w-7xl mx-auto px-6 lg:px-8">
+
+      {noLogueado && (
+        <div className="mt-4 mb-2 flex items-center gap-3 bg-gray-900 text-white rounded-xl px-4 py-3 flex-wrap">
+          <Lock size={14} className="text-[#E31E24] flex-shrink-0" />
+          <p className="text-xs sm:text-sm flex-1 min-w-0">
+            <span className="font-bold">Acceso restringido.</span>{' '}
+            <span className="text-gray-300">
+              Iniciá sesión para acceder a los módulos de monitoreo, alertas y análisis político.
+            </span>
+          </p>
+          <Link
+            href="/admin/login"
+            className="text-xs font-bold bg-[#E31E24] hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+          >
+            Iniciar sesión →
+          </Link>
+        </div>
+      )}
 
       {/* ═════════════════ HERO (compacto) ═════════════════ */}
       <section className="pt-10 pb-8 lg:pt-14 lg:pb-10">
