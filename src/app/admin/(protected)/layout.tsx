@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { esAdmin } from '@/lib/auth/permissions'
 import Link from 'next/link'
 
 export default async function AdminLayout({
@@ -15,6 +16,8 @@ export default async function AdminLayout({
   if (!user) {
     redirect('/admin/login')
   }
+
+  const usuarioEsAdmin = esAdmin(user)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,6 +63,14 @@ export default async function AdminLayout({
           >
             Medios
           </Link>
+          {usuarioEsAdmin && (
+            <Link
+              href="/admin/usuarios"
+              className="text-gray-300 hover:text-white transition-colors"
+            >
+              Usuarios
+            </Link>
+          )}
           <Link
             href="/mapa"
             className="text-gray-300 hover:text-white transition-colors"

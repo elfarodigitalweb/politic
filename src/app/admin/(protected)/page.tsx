@@ -1,10 +1,13 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Users, MapPin, BarChart3, Newspaper, Clock, TrendingUp, FileText } from 'lucide-react'
+import { esAdmin } from '@/lib/auth/permissions'
+import { Users, MapPin, BarChart3, Newspaper, Clock, TrendingUp, FileText, ShieldCheck } from 'lucide-react'
 import { timeAgo } from '@/lib/utils/date'
 
 export default async function AdminPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const usuarioEsAdmin = esAdmin(user)
 
   const [
     { count: totalProvincias },
@@ -127,6 +130,15 @@ export default async function AdminPage() {
           <MapPin size={15} />
           Ver Mapa
         </Link>
+        {usuarioEsAdmin && (
+          <Link
+            href="/admin/usuarios"
+            className="flex items-center gap-2 bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-bold border hover:border-gray-400 transition-colors"
+          >
+            <ShieldCheck size={15} />
+            Usuarios y permisos
+          </Link>
+        )}
       </div>
     </div>
   )
