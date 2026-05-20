@@ -1,0 +1,35 @@
+name: Santa Cruz · Escaneo de alertas (cada 4h)
+
+# Mantiene fresca la tabla problematicas_sc en Supabase llamando
+# a /api/escanear-sc cada 4 horas. Independiente del cron de Vercel
+# (que en plan Hobby solo corre 1 vez por día).
+
+on:
+  schedule:
+    # Cada 4 horas en punto, todos los días — UTC
+    - cron: '0 */4 * * *'
+  workflow_dispatch:  # disparable manualmente desde GitHub Actions
+
+jobs:
+  escanear:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Escanear medios y refrescar BD de alertas SC
+        run: |
+          set -e
+          HTTP_STATUS=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "${{ secrets.PORTAL_URL }}/api/escanear-sc" \
+            -H "Authorization: Bearer ${{ secrets.ANALIZAR_SECRET }}" \
+            --max-time 90)
+          echo "HTTP $HTTP_STATUS"
+          cat /tmp/resp.json
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::El escaneo respondió con $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Invalidar cache ISR de /santa-cruz
+        run: |
+          curl -s -X POST \
+            "${{ secrets.PORTAL_URL }}/api/refresh-santa-cruz" \
+            --max-time 30 || echo "Revalidate falló (no bloqueante)"

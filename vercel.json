@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/analizar",
+      "schedule": "0 0,6,12,18 * * *"
+    },
+    {
+      "path": "/api/escanear-sc",
+      "schedule": "30 0,6,12,18 * * *"
+    },
+    {
+      "path": "/api/generar-clipping",
+      "schedule": "0 1,7,13,19 * * *"
+    }
+  ]
+}
