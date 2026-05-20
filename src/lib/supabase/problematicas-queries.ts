@@ -1,8 +1,9 @@
 import { createClient } from './server'
 import type { ProblemaDetectado } from '@/lib/sources/problematicas-sc'
+import type { ProblemaProvincial } from '@/lib/sources/problematicas-provincial'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: any): ProblemaDetectado & { id: number } {
+function mapRow(row: any): ProblemaDetectado & { id: number; provinciaSlug: string } {
   return {
     id: row.id,
     localidadSlug: row.localidad_slug,
@@ -13,9 +14,11 @@ function mapRow(row: any): ProblemaDetectado & { id: number } {
     url: row.url ?? null,
     severidad: row.severidad as 1 | 2 | 3,
     publicadoAt: row.publicado_at,
+    provinciaSlug: row.provincia_slug ?? 'santa-cruz',
   }
 }
 
+// Versión "legacy" para SC — guarda con provincia_slug = 'santa-cruz' por default
 export async function guardarProblematicas(
   problemas: ProblemaDetectado[]
 ): Promise<number> {
@@ -31,6 +34,7 @@ export async function guardarProblematicas(
     url: p.url,
     severidad: p.severidad,
     publicado_at: p.publicadoAt,
+    provincia_slug: 'santa-cruz',
   }))
 
   // Upsert por URL para no duplicar; si no hay URL, insertar siempre
@@ -72,20 +76,58 @@ export async function getProblematicasByLocalidad(
 
 export async function getProblematicasRecientes(
   dias = 7,
-  limit = 50
-): Promise<(ProblemaDetectado & { id: number })[]> {
+  limit = 50,
+  provinciaSlug = 'santa-cruz'
+): Promise<(ProblemaDetectado & { id: number; provinciaSlug: string })[]> {
   const supabase = await createClient()
   const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
   const { data } = await supabase
     .from('problematicas_sc')
     .select('*')
+    .eq('provincia_slug', provinciaSlug)
     .gte('publicado_at', desde)
-    // Recencia primero, severidad como secundaria — así las alertas frescas
-    // no quedan tapadas por alertas viejas de severidad alta.
+    // Recencia primero, severidad como secundaria
     .order('publicado_at', { ascending: false })
     .order('severidad', { ascending: false })
     .limit(limit)
   return (data ?? []).map(mapRow)
+}
+
+// Versión genérica que guarda con cualquier provincia_slug
+export async function guardarProblematicasProvincial(
+  problemas: ProblemaProvincial[]
+): Promise<number> {
+  if (problemas.length === 0) return 0
+  const supabase = await createClient()
+
+  const rows = problemas.map((p) => ({
+    localidad_slug: p.localidadSlug,
+    localidad_nombre: p.localidadNombre,
+    categoria: p.categoria,
+    titulo: p.titulo,
+    fuente_nombre: p.fuenteNombre,
+    url: p.url,
+    severidad: p.severidad,
+    publicado_at: p.publicadoAt,
+    provincia_slug: p.provinciaSlug,
+  }))
+
+  const conUrl = rows.filter(r => r.url)
+  const sinUrl = rows.filter(r => !r.url)
+
+  let insertados = 0
+  if (conUrl.length > 0) {
+    const { data } = await supabase
+      .from('problematicas_sc')
+      .upsert(conUrl, { onConflict: 'url', ignoreDuplicates: true })
+      .select('id')
+    insertados += data?.length ?? 0
+  }
+  if (sinUrl.length > 0) {
+    const { data } = await supabase.from('problematicas_sc').insert(sinUrl).select('id')
+    insertados += data?.length ?? 0
+  }
+  return insertados
 }
 
 export async function getResumenProblematicas(): Promise<{

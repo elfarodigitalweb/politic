@@ -89,9 +89,9 @@ const LOCALIDADES_SC: Record<string, { nombre: string; keywords: string[] }> = {
 }
 
 // ---------------------------------------------------------------
-// Categorías de problemas
+// Categorías de problemas (exportadas para reutilización en otros scanners)
 // ---------------------------------------------------------------
-const CATEGORIAS: Record<string, { nombre: string; emoji: string; keywords: string[]; alta: string[] }> = {
+export const CATEGORIAS: Record<string, { nombre: string; emoji: string; keywords: string[]; alta: string[] }> = {
   salud: {
     nombre: 'Salud', emoji: '🏥',
     keywords: ['hospital', 'salud', 'médico', 'médicos', 'oxígeno', 'medicamento', 'ambulancia', 'guardia', 'clínica', 'enfermera', 'sanitario', 'internado', 'UCI'],
@@ -169,7 +169,7 @@ function detectarLocalidad(texto: string): { slug: string; nombre: string } | nu
 }
 
 // Siempre devuelve algo — 'General' con severidad 1 si no hay match de problema
-function detectarCategoria(texto: string): { categoria: string; severidad: 1 | 2 | 3 } {
+export function detectarCategoria(texto: string): { categoria: string; severidad: 1 | 2 | 3 } {
   const lower = texto.toLowerCase()
   for (const [cat, { keywords, alta }] of Object.entries(CATEGORIAS)) {
     if (keywords.some(kw => lower.includes(kw))) {
