@@ -10,7 +10,9 @@ export const metadata: Metadata = {
   description: 'Monitoreo político por provincia. 24 provincias + CABA.',
 }
 
-export const revalidate = 60
+// force-dynamic evita que Vercel cachee HTML pre-renderizado en el CDN
+// (que se ha demostrado problemático con builds anteriores rotos)
+export const dynamic = 'force-dynamic'
 
 const PROVINCIA_DESTACADA = 'santa-cruz'
 
