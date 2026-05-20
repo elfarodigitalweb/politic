@@ -165,7 +165,7 @@ export async function ejecutarAnalisisCompleto(): Promise<{
     const mediosLocales = await getMediosLocales().catch(() => [])
     const extraFeeds = mediosLocales
       .filter(m => m.urlRss)
-      .map(m => medioToFeed({ nombre: m.nombre, urlRss: m.urlRss, provinciaSlug: m.provinciaSlug }))
+      .map(m => medioToFeed({ nombre: m.nombre, urlRss: m.urlRss as string, provinciaSlug: m.provinciaSlug }))
 
     const [rssItems, googleResults] = await Promise.all([
       fetchAllRSSFeeds(extraFeeds).catch((e) => { console.error('[RSS]', e.message); return [] }),
