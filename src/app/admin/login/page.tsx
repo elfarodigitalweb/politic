@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -10,6 +10,8 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = searchParams.get('next') || '/'
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -23,7 +25,7 @@ export default function LoginPage() {
       setError('Email o contraseña incorrectos')
       setLoading(false)
     } else {
-      router.push('/admin')
+      router.push(next)
       router.refresh()
     }
   }
