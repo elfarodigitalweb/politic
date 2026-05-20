@@ -5,7 +5,6 @@ import { getProblematicasRecientes } from '@/lib/supabase/problematicas-queries'
 import { getPoliticoBySlug, getUltimaImagen, getMencionesNegativasSC, getImagenesPoliticos } from '@/lib/supabase/politicos-queries'
 import { getUltimaEncuesta } from '@/lib/supabase/encuestas-queries'
 import { CATEGORIA_EMOJIS, CATEGORIA_COLORES, SEVERIDAD_COLORES, SEVERIDAD_LABELS, escanearProblematicas } from '@/lib/sources/problematicas-sc'
-import { guardarProblematicas } from '@/lib/supabase/problematicas-queries'
 import { ALERTAS_SC_SEED, type AlertaSeed } from '@/lib/sources/alertas-sc-seed'
 import { TrendingUp, TrendingDown, MapPin, AlertTriangle, CheckCircle, Newspaper, BarChart3, ExternalLink, ShieldAlert } from 'lucide-react'
 import { timeAgo } from '@/lib/utils/date'
@@ -17,6 +16,9 @@ export const metadata: Metadata = {
 }
 
 export const revalidate = 60
+// En Vercel: subir el timeout por encima del default (10s) ya que el render
+// dispara un escaneo en vivo de RSS externos.
+export const maxDuration = 30
 
 // Mapeo ciudad slug → intendente slug (para link al perfil)
 const CIUDAD_INTENDENTE: Record<string, string> = {
@@ -72,9 +74,18 @@ export default async function SantaCruzPage() {
   const esReciente = (fechaISO: string) =>
     new Date(fechaISO).getTime() >= limiteMs
 
+  // Timeout para el escaneo en vivo. En Vercel las Server Functions tienen
+  // límite de 10s default — si los RSS externos tardan, el page entero falla.
+  // Si timeout o error → caemos a BD solamente (que siempre tiene los datos
+  // del último cron + del último botón "Refrescar").
+  const escaneoConTimeout = Promise.race([
+    escanearProblematicas(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('scan-timeout')), 6000)
+    ),
+  ]).catch(() => [] as Awaited<ReturnType<typeof escanearProblematicas>>)
+
   // En PARALELO: BD (10 días) + escaneo en vivo de RSS/Google News.
-  // El escaneo en vivo garantiza que SIEMPRE veamos lo último publicado,
-  // aunque nadie haya tocado el botón "Refrescar alertas".
   const [
     ciudades,
     gobernador,
@@ -88,17 +99,16 @@ export default async function SantaCruzPage() {
     getImagenesPoliticos(todosLosSlugsPoliticos).catch(() => new Map()),
     getProblematicasRecientes(VENTANA_DIAS, 200).catch(() => []),
     getMencionesNegativasSC(VENTANA_DIAS, 80).catch(() => []),
-    escanearProblematicas().catch(() => []),
+    escaneoConTimeout,
   ])
 
   // Filtro defensivo: solo items dentro de la ventana de 10 días.
   const mencionesNeg = mencionesNegRaw.filter(m => esReciente(m.publicadoAt))
 
-  // Persistir en background los items nuevos del escaneo en vivo (sólo recientes)
+  // Items nuevos del escaneo dentro de la ventana. No los guardamos en background
+  // desde el render (en serverless las promises huérfanas se cortan). La
+  // persistencia se hace desde el botón Refrescar y el cron.
   const liveRecientes = alertasLive.filter(p => esReciente(p.publicadoAt))
-  if (liveRecientes.length > 0) {
-    guardarProblematicas(liveRecientes).catch(() => {})
-  }
 
   // Combinar BD + live, dedupe por URL (y por título si no hay URL),
   // descartando todo lo que esté fuera de la ventana.
